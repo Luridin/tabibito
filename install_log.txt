@@ -1,0 +1,48 @@
+npm verbose cli /home/lumin/.nvm/versions/node/v24.13.0/bin/node /home/lumin/.nvm/versions/node/v24.13.0/bin/npm
+npm info using npm@11.6.2
+npm info using node@v24.13.0
+npm verbose title npm install framer-motion react-simple-maps lucide-react clsx tailwind-merge
+npm verbose argv "install" "framer-motion" "react-simple-maps" "lucide-react" "clsx" "tailwind-merge" "--loglevel" "verbose"
+npm verbose logfile logs-max:10 dir:/home/lumin/.npm/_logs/2026-02-02T16_07_52_121Z-
+npm verbose logfile /home/lumin/.npm/_logs/2026-02-02T16_07_52_121Z-debug-0.log
+npm http cache https://registry.npmjs.org/react-simple-maps 24ms (cache hit)
+npm http cache https://registry.npmjs.org/prop-types 1ms (cache hit)
+npm http cache https://registry.npmjs.org/react 7ms (cache hit)
+npm http cache https://registry.npmjs.org/react 6ms (cache hit)
+npm verbose stack Error: unable to resolve dependency tree
+npm verbose stack     at #failPeerConflict (/home/lumin/.nvm/versions/node/v24.13.0/lib/node_modules/npm/node_modules/@npmcli/arborist/lib/arborist/build-ideal-tree.js:1420:25)
+npm verbose stack     at #loadPeerSet (/home/lumin/.nvm/versions/node/v24.13.0/lib/node_modules/npm/node_modules/@npmcli/arborist/lib/arborist/build-ideal-tree.js:1386:33)
+npm verbose stack     at async #buildDepStep (/home/lumin/.nvm/versions/node/v24.13.0/lib/node_modules/npm/node_modules/@npmcli/arborist/lib/arborist/build-ideal-tree.js:929:11)
+npm verbose stack     at async Arborist.buildIdealTree (/home/lumin/.nvm/versions/node/v24.13.0/lib/node_modules/npm/node_modules/@npmcli/arborist/lib/arborist/build-ideal-tree.js:182:7)
+npm verbose stack     at async Promise.all (index 1)
+npm verbose stack     at async Arborist.reify (/home/lumin/.nvm/versions/node/v24.13.0/lib/node_modules/npm/node_modules/@npmcli/arborist/lib/arborist/reify.js:114:5)
+npm verbose stack     at async Install.exec (/home/lumin/.nvm/versions/node/v24.13.0/lib/node_modules/npm/lib/commands/install.js:150:5)
+npm verbose stack     at async Npm.exec (/home/lumin/.nvm/versions/node/v24.13.0/lib/node_modules/npm/lib/npm.js:208:9)
+npm verbose stack     at async module.exports (/home/lumin/.nvm/versions/node/v24.13.0/lib/node_modules/npm/lib/cli/entry.js:67:5)
+npm error code ERESOLVE
+npm error ERESOLVE unable to resolve dependency tree
+npm error
+npm error While resolving: tabibito@0.1.0
+npm error Found: react@19.2.3
+npm error node_modules/react
+npm error   react@"19.2.3" from the root project
+npm error
+npm error Could not resolve dependency:
+npm error peer react@"^16.8.0 || 17.x || 18.x" from react-simple-maps@3.0.0
+npm error node_modules/react-simple-maps
+npm error   react-simple-maps@"^3.0.0" from the root project
+npm error
+npm error Fix the upstream dependency conflict, or retry
+npm error this command with --force or --legacy-peer-deps
+npm error to accept an incorrect (and potentially broken) dependency resolution.
+npm error
+npm error
+npm error For a full report see:
+npm error /home/lumin/.npm/_logs/2026-02-02T16_07_52_121Z-eresolve-report.txt
+npm verbose cwd /home/lumin/Development/tabibito
+npm verbose os Linux 6.18.7-200.fc43.x86_64
+npm verbose node v24.13.0
+npm verbose npm  v11.6.2
+npm verbose exit 1
+npm verbose code 1
+npm error A complete log of this run can be found in: /home/lumin/.npm/_logs/2026-02-02T16_07_52_121Z-debug-0.log

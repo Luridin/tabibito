@@ -1,0 +1,15 @@
+app
+components
+data
+eslint.config.mjs
+next.config.ts
+next-env.d.ts
+node_modules
+output.txt
+package.json
+package-lock.json
+postcss.config.mjs
+public
+README.md
+tsconfig.json
+types
