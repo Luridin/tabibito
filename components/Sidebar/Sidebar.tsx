@@ -19,7 +19,7 @@ export default function Sidebar({ activeState, stateData, onClose }: Props) {
                     animate={{ x: 0, opacity: 1 }}
                     exit={{ x: "100%", opacity: 0 }}
                     transition={{ type: "spring", damping: 20 }}
-                    className="fixed top-0 right-0 h-full w-[400px] bg-white/95 backdrop-blur-xl border-l border-neutral-100 p-8 shadow-[0_0_100px_rgba(0,0,0,0.1)] z-50 overflow-y-auto"
+                    className="fixed top-0 right-0 h-full w-[800px] bg-white/95 backdrop-blur-xl border-l border-neutral-100 p-8 shadow-[0_0_100px_rgba(0,0,0,0.1)] z-50 overflow-y-auto"
                 >
                     <button
                         onClick={onClose}
