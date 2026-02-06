@@ -1,15 +1,27 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import MapContainer from "@/components/Map/MapContainer";
 import Sidebar from "@/components/Sidebar/Sidebar";
 import CountrySelector from "@/components/CountrySelector";
+import ImageLightbox from "@/components/ImageLightbox";
 import { COUNTRIES, TRAVEL_DATA } from "@/data/locations";
 import { Country } from "@/types";
 
 export default function Home() {
   const [activeState, setActiveState] = useState<string | null>(null);
   const [selectedCountry, setSelectedCountry] = useState<Country>(COUNTRIES[0]);
+  const [layout, setLayout] = useState<"portrait" | "landscape">("landscape");
+  const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(null);
+  const [galleryImages, setGalleryImages] = useState<Array<{ id: string; url: string; caption: string }>>([]);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(orientation: portrait)");
+    const updateLayout = () => setLayout(mq.matches ? "portrait" : "landscape");
+    updateLayout();
+    mq.addEventListener("change", updateLayout);
+    return () => mq.removeEventListener("change", updateLayout);
+  }, []);
 
   // Find the data for the active state to pass to sidebar
   const activeStateData = activeState && TRAVEL_DATA[selectedCountry.id]?.states[activeState]
@@ -17,7 +29,7 @@ export default function Home() {
     : null;
 
   return (
-    <main className="h-screen w-screen bg-white text-neutral-900 overflow-hidden relative selection:bg-amber-500/20">
+    <main className="tabibito-shell h-screen w-screen bg-white text-neutral-900 overflow-hidden relative selection:bg-amber-500/20">
       {/* Header / Nav Area */}
       <CountrySelector
         countries={COUNTRIES}
@@ -29,12 +41,13 @@ export default function Home() {
       />
 
       {/* Map Layer */}
-      <div className="absolute inset-0 z-0">
+      <div className="tabibito-map z-0">
         <MapContainer
           activeState={activeState}
           setActiveState={setActiveState}
           country={selectedCountry}
           travelData={TRAVEL_DATA}
+          layout={layout}
         />
       </div>
 
@@ -43,6 +56,26 @@ export default function Home() {
         activeState={activeState}
         stateData={activeStateData}
         onClose={() => setActiveState(null)}
+        layout={layout}
+        onGalleryImages={setGalleryImages}
+        onImageSelect={setSelectedImageIndex}
+      />
+
+      {/* Lightbox (rendered outside sidebar) */}
+      <ImageLightbox
+        selectedImageIndex={selectedImageIndex}
+        onClose={() => setSelectedImageIndex(null)}
+        onPrevImage={() => {
+          if (selectedImageIndex !== null && galleryImages.length > 0) {
+            setSelectedImageIndex((selectedImageIndex - 1 + galleryImages.length) % galleryImages.length);
+          }
+        }}
+        onNextImage={() => {
+          if (selectedImageIndex !== null && galleryImages.length > 0) {
+            setSelectedImageIndex((selectedImageIndex + 1) % galleryImages.length);
+          }
+        }}
+        galleryImages={galleryImages}
       />
     </main>
   );

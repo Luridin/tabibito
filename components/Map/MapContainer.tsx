@@ -4,8 +4,7 @@ import { Country, TravelData } from "@/types";
 import {
   ComposableMap,
   Geographies,
-  Geography,
-  ZoomableGroup
+  Geography
 } from "react-simple-maps";
 import { useState, useMemo, useCallback, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
@@ -15,17 +14,19 @@ type Props = {
   setActiveState: (state: string | null) => void;
   country: Country;
   travelData: TravelData;
+  layout: "portrait" | "landscape";
 };
 
 export default function MapContainer({
   activeState,
   setActiveState,
   country,
-  travelData
+  travelData,
+  layout
 }: Props) {
   const [hoveredState, setHoveredState] = useState<string | null>(null);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
-  const tooltipTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const clickTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Memoize country data
   const currentCountryData = useMemo(() => {
@@ -47,30 +48,56 @@ export default function MapContainer({
     setMousePos({ x: e.clientX, y: e.clientY });
   }, []);
 
+  // Debounced state click handler to prevent rapid changes
+  const handleStateClick = useCallback((stateId: string) => {
+    if (clickTimeoutRef.current) {
+      clearTimeout(clickTimeoutRef.current);
+    }
+    clickTimeoutRef.current = setTimeout(() => {
+      setActiveState(stateId);
+      setHoveredState(null);
+    }, 0);
+  }, [setActiveState]);
+
+  // Memoize transform to avoid recalculation
+  const mapTransform = useMemo(() => {
+    if (layout === "portrait") {
+      return activeState ? "translateY(8%) scale(0.95)" : "translateY(12%) scale(1)";
+    }
+    return activeState ? "translateX(-10%) scale(0.92)" : "none";
+  }, [layout, activeState]);
+
+  // Memoize projection config
+  const projectionConfig = useMemo(() => ({
+    scale: layout === "portrait" ? 1100 : 850,
+    center: [82.0, 22.0] as [number, number]
+  }), [layout]);
+
   return (
     <div
-      className="absolute inset-0 overflow-hidden"
+      className="absolute inset-0 overflow-hidden select-none"
       onMouseMove={handleMouseMove}
+      onDoubleClick={(e) => e.preventDefault()}
+      onMouseDown={(e) => e.detail > 1 && e.preventDefault()}
     >
       {/* Map container transform (camera-level only, safe) */}
       <div
-        className="w-full h-full transition-all duration-700 ease-in-out"
+        className="w-full h-full"
         style={{
-          transform: activeState
-            ? "translateX(-15%) scale(0.95)"
-            : "translateX(0) scale(1)",
-          transformOrigin: "center left"
+          position: 'absolute',
+          inset: 0,
+          transform: mapTransform,
+          transformOrigin: "center center",
+          transition: "transform 500ms cubic-bezier(0.4, 0, 0.2, 1)",
+          willChange: "transform",
         }}
       >
         <ComposableMap
           projection="geoMercator"
-          projectionConfig={{
-            scale: 800,
-            center: [82.0, 22.0]
-          }}
+          projectionConfig={projectionConfig}
           className="w-full h-full outline-none"
+          style={{ pointerEvents: 'auto' }}
         >
-          <ZoomableGroup center={[82.0, 22.0]} minZoom={1} maxZoom={8}>
             <Geographies geography={country.mapUrl}>
               {({ geographies }) =>
                 geographies.map((geo) => {
@@ -80,24 +107,20 @@ export default function MapContainer({
                   const stateEntry = statesByGeoId.get(stName);
 
                   const isVisited = stateEntry?.visited;
-                  const isActive =
-                    stateEntry && activeState === stateEntry.id;
+                  const isActive = stateEntry && activeState === stateEntry.id;
                   const isHovered = stName === hoveredState;
-                  const isSelected = isActive || isHovered;
 
                   return (
                     <Geography
                       key={geo.rsmKey}
                       geography={geo}
-                      onPointerEnter={() => setHoveredState(stName)}
-                      onPointerLeave={() => setHoveredState(null)}
+                      onMouseEnter={() => setHoveredState(stName)}
+                      onMouseLeave={() => setHoveredState(null)}
                       onClick={(e) => {
+                        e.preventDefault();
                         e.stopPropagation();
-                        setActiveState(stateEntry?.id ?? stName);
-                        setHoveredState(null);
+                        handleStateClick(stateEntry?.id ?? stName);
                       }}
-                      stroke="transparent"
-                      strokeWidth={10} // invisible hit-area
                       style={{
                         default: {
                           fill: isActive
@@ -110,13 +133,15 @@ export default function MapContainer({
                           stroke: isActive ? "#ffffff" : isHovered ? "#ffffff" : "#e5e7eb",
                           strokeWidth: isActive ? 1.5 : isHovered ? 1 : 0.5,
                           outline: "none",
-                          vectorEffect: "non-scaling-stroke",
                           cursor: "pointer",
-                          opacity: 1
+                          transition: "all 150ms ease-in-out"
                         },
                         hover: {
                           fill: isActive ? "#fbbf24" : "#fde68a",
                           cursor: "pointer"
+                        },
+                        pressed: {
+                          fill: "#fbbf24"
                         }
                       }}
                     />
@@ -124,7 +149,6 @@ export default function MapContainer({
                 })
               }
             </Geographies>
-          </ZoomableGroup>
         </ComposableMap>
       </div>
 

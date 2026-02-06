@@ -17,3 +17,79 @@ body {
   overflow: hidden;
   /* Prevent scrolling for the map app */
 }
+
+/* Prevent text selection on map */
+svg,
+svg * {
+  user-select: none;
+  -webkit-user-select: none;
+  pointer-events: auto;
+}
+
+/* Tabibito orientation-aware layout */
+.tabibito-shell {
+  position: relative;
+}
+
+.tabibito-map {
+  position: absolute;
+  inset: 0;
+}
+
+.tabibito-sidebar {
+  position: fixed;
+  right: 0;
+  top: 0;
+  height: 100vh;
+  width: 25vw;
+  max-width: 520px;
+  border-left: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.tabibito-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.08);
+  z-index: 40;
+  display: none;
+  pointer-events: auto;
+}
+
+.tabibito-handle {
+  display: none;
+}
+
+@media (orientation: portrait) {
+  .tabibito-sidebar {
+    left: 0;
+    right: 0;
+    top: auto;
+    bottom: 0;
+    height: 40vh;
+    width: 100vw;
+    max-width: none;
+    min-width: 0;
+    border-left: 0;
+    border-top: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 16px 16px 0 0;
+  }
+
+  .tabibito-map {
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 40vh;
+    pointer-events: auto;
+    z-index: 45;
+  }
+
+  .tabibito-backdrop {
+    background: transparent;
+    display: none;
+    pointer-events: none;
+  }
+
+  .tabibito-handle {
+    display: block;
+  }
+}
