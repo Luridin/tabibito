@@ -140,7 +140,7 @@ export const TRAVEL_DATA: TravelData = {
             },
             "AR": {
                 id: "AR",
-                geoId: "Arunanchal Pradesh",
+                geoId: "Arunachal Pradesh",
                 name: "Arunachal Pradesh",
                 description: "The land of dawn, where the sun rises first.",
                 visited: true,

@@ -1,19 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import MapContainer from "@/components/Map/MapContainer";
 import Sidebar from "@/components/Sidebar/Sidebar";
 import CountrySelector from "@/components/CountrySelector";
 import ImageLightbox from "@/components/ImageLightbox";
 import { COUNTRIES, TRAVEL_DATA } from "@/data/locations";
-import { Country } from "@/types";
+import { Country, GalleryImage } from "@/types";
 
-export default function Home() {
+export default function TabibitoApp() {
   const [activeState, setActiveState] = useState<string | null>(null);
   const [selectedCountry, setSelectedCountry] = useState<Country>(COUNTRIES[0]);
   const [layout, setLayout] = useState<"portrait" | "landscape">("landscape");
   const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(null);
-  const [galleryImages, setGalleryImages] = useState<Array<{ id: string; url: string; caption: string }>>([]);
+  const [galleryImages, setGalleryImages] = useState<GalleryImage[]>([]);
 
   useEffect(() => {
     const mq = window.matchMedia("(orientation: portrait)");
@@ -23,24 +23,40 @@ export default function Home() {
     return () => mq.removeEventListener("change", updateLayout);
   }, []);
 
-  // Find the data for the active state to pass to sidebar
   const activeStateData = activeState && TRAVEL_DATA[selectedCountry.id]?.states[activeState]
     ? TRAVEL_DATA[selectedCountry.id].states[activeState]
     : null;
 
+  const handleCountrySelect = useCallback((country: Country) => {
+    setSelectedCountry(country);
+    setActiveState(null);
+  }, []);
+
+  const handleCloseState = useCallback(() => setActiveState(null), []);
+  const handleCloseLightbox = useCallback(() => setSelectedImageIndex(null), []);
+
+  const handlePrevImage = useCallback(() => {
+    setSelectedImageIndex((prev) => {
+      if (prev === null || galleryImages.length === 0) return prev;
+      return (prev - 1 + galleryImages.length) % galleryImages.length;
+    });
+  }, [galleryImages.length]);
+
+  const handleNextImage = useCallback(() => {
+    setSelectedImageIndex((prev) => {
+      if (prev === null || galleryImages.length === 0) return prev;
+      return (prev + 1) % galleryImages.length;
+    });
+  }, [galleryImages.length]);
+
   return (
-    <main className="tabibito-shell h-screen w-screen bg-white text-neutral-900 overflow-hidden relative selection:bg-amber-500/20">
-      {/* Header / Nav Area */}
+    <main className="tabibito-shell h-screen h-dvh w-screen bg-white text-neutral-900 overflow-hidden relative selection:bg-amber-500/20">
       <CountrySelector
         countries={COUNTRIES}
         selectedCountry={selectedCountry}
-        onSelect={(country) => {
-          setSelectedCountry(country);
-          setActiveState(null); // Reset state when changing country
-        }}
+        onSelect={handleCountrySelect}
       />
 
-      {/* Map Layer */}
       <div className="tabibito-map z-0">
         <MapContainer
           activeState={activeState}
@@ -51,30 +67,20 @@ export default function Home() {
         />
       </div>
 
-      {/* Sidebar Overlay */}
       <Sidebar
         activeState={activeState}
         stateData={activeStateData}
-        onClose={() => setActiveState(null)}
+        onClose={handleCloseState}
         layout={layout}
         onGalleryImages={setGalleryImages}
         onImageSelect={setSelectedImageIndex}
       />
 
-      {/* Lightbox (rendered outside sidebar) */}
       <ImageLightbox
         selectedImageIndex={selectedImageIndex}
-        onClose={() => setSelectedImageIndex(null)}
-        onPrevImage={() => {
-          if (selectedImageIndex !== null && galleryImages.length > 0) {
-            setSelectedImageIndex((selectedImageIndex - 1 + galleryImages.length) % galleryImages.length);
-          }
-        }}
-        onNextImage={() => {
-          if (selectedImageIndex !== null && galleryImages.length > 0) {
-            setSelectedImageIndex((selectedImageIndex + 1) % galleryImages.length);
-          }
-        }}
+        onClose={handleCloseLightbox}
+        onPrevImage={handlePrevImage}
+        onNextImage={handleNextImage}
         galleryImages={galleryImages}
       />
     </main>

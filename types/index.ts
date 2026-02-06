@@ -1,3 +1,9 @@
+export interface GalleryImage {
+    id: string;
+    url: string;
+    caption: string;
+}
+
 export interface Location {
     id: string;
     name: string;
@@ -7,16 +13,24 @@ export interface Location {
     dateVisited?: string;
 }
 
+export interface CityData {
+    id: string;
+    name: string;
+    description: string;
+    visited: boolean;
+    imageUrl?: string;
+}
+
 export interface StateData extends Location {
-    cities: Location[];
-    geoId: string; // ID to match map topology
+    cities: CityData[];
+    geoId: string;
 }
 
 export interface Country {
-    id: string; // ISO code usually
+    id: string;
     name: string;
     flag: string;
-    mapUrl: string; // Path to topojson
+    mapUrl: string;
 }
 
 export interface TravelData {

@@ -2,20 +2,19 @@
 
 @theme {
   --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
 }
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --border-subtle: rgba(0, 0, 0, 0.08);
 }
 
 body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  color: #171717;
+  background: #ffffff;
+  font-family: var(--font-geist-sans, system-ui, -apple-system, sans-serif);
   overflow: hidden;
-  /* Prevent scrolling for the map app */
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: none;
 }
 
 /* Prevent text selection on map */
@@ -41,55 +40,68 @@ svg * {
   right: 0;
   top: 0;
   height: 100vh;
+  height: 100dvh;
   width: 25vw;
   max-width: 520px;
-  border-left: 1px solid rgba(0, 0, 0, 0.08);
-}
-
-.tabibito-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.08);
-  z-index: 40;
-  display: none;
-  pointer-events: auto;
+  border-left: 1px solid var(--border-subtle);
 }
 
 .tabibito-handle {
   display: none;
 }
 
+/* Portrait / mobile layout */
 @media (orientation: portrait) {
+  .tabibito-map {
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    pointer-events: auto;
+    z-index: 0;
+  }
+
   .tabibito-sidebar {
     left: 0;
     right: 0;
     top: auto;
     bottom: 0;
     height: 40vh;
+    height: 40dvh;
     width: 100vw;
     max-width: none;
     min-width: 0;
     border-left: 0;
-    border-top: 1px solid rgba(0, 0, 0, 0.08);
+    border-top: 1px solid var(--border-subtle);
     border-radius: 16px 16px 0 0;
-  }
-
-  .tabibito-map {
-    left: 0;
-    right: 0;
-    top: 0;
-    bottom: 40vh;
-    pointer-events: auto;
-    z-index: 45;
-  }
-
-  .tabibito-backdrop {
-    background: transparent;
-    display: none;
-    pointer-events: none;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
   }
 
   .tabibito-handle {
     display: block;
+  }
+}
+
+/* Small mobile screens */
+@media (orientation: portrait) and (max-height: 700px) {
+  .tabibito-sidebar {
+    height: 38vh;
+    height: 38dvh;
+  }
+}
+
+/* Very small screens (e.g. iPhone SE) */
+@media (orientation: portrait) and (max-height: 570px) {
+  .tabibito-sidebar {
+    height: 35vh;
+    height: 35dvh;
+  }
+}
+
+/* Landscape mobile (short height) */
+@media (orientation: landscape) and (max-width: 900px) {
+  .tabibito-sidebar {
+    width: 40vw;
+    max-width: none;
   }
 }
