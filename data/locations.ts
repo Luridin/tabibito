@@ -114,6 +114,14 @@ export const TRAVEL_DATA: TravelData = {
                 visited: true,
                 cities: []
             },
+            "LA": {
+                id: "LA",
+                geoId: "Ladakh",
+                name: "Ladakh",
+                description: "The land of high passes. A breathtaking union territory of rugged terrain, ancient monasteries, and pristine lakes.",
+                visited: true,
+                cities: []
+            },
             "MP": {
                 id: "MP",
                 geoId: "Madhya Pradesh",
