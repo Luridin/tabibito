@@ -16,7 +16,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   basePath: "/tabibito",
-  assetPrefix: "/tabibito",
+
 
   images: {
     remotePatterns: [
