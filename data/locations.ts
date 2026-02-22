@@ -5,7 +5,7 @@ export const COUNTRIES: Country[] = [
         id: "IN",
         name: "India",
         flag: "🇮🇳",
-        mapUrl: "/maps/india-states.geojson"
+        mapUrl: "/tabibito/maps/india-states.geojson"
     }
 ];
 
