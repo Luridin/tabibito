@@ -53,7 +53,7 @@ export default function CountrySelector({ countries, selectedCountry, onSelect }
                     aria-haspopup="listbox"
                     aria-expanded={isOpen}
                     aria-label={`Select country: ${selectedCountry.name}`}
-                    className="flex items-center gap-1 sm:gap-3 bg-white/80 backdrop-blur-md border border-neutral-200 text-neutral-900 px-2 py-1.5 sm:px-4 sm:py-3 rounded-lg sm:rounded-xl hover:border-neutral-300 transition-colors w-auto sm:w-[200px] justify-between shadow-sm"
+                    className="flex items-center gap-1 sm:gap-3 bg-white/80 backdrop-blur-md border border-neutral-200 text-neutral-900 px-2 py-1.5 sm:px-4 sm:py-3 rounded-lg sm:rounded-xl hover:border-neutral-300 transition-colors w-auto sm:w-[280px] justify-between shadow-sm"
                 >
                     <div className="flex items-center gap-1 sm:gap-2">
                         <span className="text-sm sm:text-xl">{selectedCountry.flag}</span>

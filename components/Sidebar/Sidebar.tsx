@@ -1,12 +1,19 @@
 "use client";
 
 import { StateData, GalleryImage } from "@/types";
+import { APP_BASE_PATH } from "@/lib/constants";
 import { X } from "lucide-react";
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import Image from "next/image";
+
+const getTemporaryGalleryImage = (cityName: string, viewNumber: number) => {
+    const label = `${cityName} - View ${viewNumber}`;
+    const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='400' height='300' viewBox='0 0 400 300'><defs><linearGradient id='sky' x1='0' y1='0' x2='1' y2='1'><stop stop-color='#f8fafc'/><stop offset='1' stop-color='#fde68a'/></linearGradient></defs><rect width='400' height='300' fill='url(#sky)'/><circle cx='315' cy='74' r='28' fill='#f59e0b' opacity='0.85'/><path d='M0 230 C55 205 95 198 150 214 C205 230 250 248 320 214 C350 200 374 198 400 205 L400 300 L0 300 Z' fill='#d6d3d1'/><path d='M0 250 C48 228 104 226 156 242 C212 259 278 268 336 238 C360 225 380 220 400 224 L400 300 L0 300 Z' fill='#a8a29e'/><text x='28' y='44' font-family='Arial, sans-serif' font-size='15' fill='#57534e'>Temporary gallery image</text><text x='28' y='268' font-family='Arial, sans-serif' font-size='20' font-weight='700' fill='#1c1917'>${label}</text></svg>`;
+    return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+};
 
 type Props = {
+    countryId: string;
     activeState: string | null;
     stateData: StateData | null;
     onClose: () => void;
@@ -15,36 +22,120 @@ type Props = {
     onImageSelect: (index: number | null) => void;
 };
 
-export default function Sidebar({ activeState, stateData, onClose, layout, onGalleryImages, onImageSelect }: Props) {
+export default function Sidebar({ countryId, activeState, stateData, onClose, layout, onGalleryImages, onImageSelect }: Props) {
     const [selectedCityId, setSelectedCityId] = useState<string | null>(null);
-
-    // Auto-select first city alphabetically when state changes
-    useEffect(() => {
-        if (stateData && stateData.cities.length > 0) {
-            const sortedCities = [...stateData.cities].sort((a, b) => a.name.localeCompare(b.name));
-            setSelectedCityId(sortedCities[0].id);
-        } else {
-            setSelectedCityId(null);
-        }
-        onImageSelect(null);
-    }, [activeState, stateData, onImageSelect]);
+    const [galleryCache, setGalleryCache] = useState<Record<string, GalleryImage[]>>({});
+    const [pendingGalleryKeys, setPendingGalleryKeys] = useState<Record<string, boolean>>({});
 
     const sortedCities = useMemo(() => {
         return stateData ? [...stateData.cities].sort((a, b) => a.name.localeCompare(b.name)) : [];
     }, [stateData]);
 
-    const selectedCity = useMemo(() => {
-        return selectedCityId ? sortedCities.find(c => c.id === selectedCityId) : null;
-    }, [selectedCityId, sortedCities]);
+    const resolvedSelectedCityId = useMemo(() => {
+        if (sortedCities.length === 0) return null;
+        const hasSelected = selectedCityId && sortedCities.some((city) => city.id === selectedCityId);
+        return hasSelected ? selectedCityId : sortedCities[0].id;
+    }, [sortedCities, selectedCityId]);
 
-    const galleryImages: GalleryImage[] = useMemo(() => {
+    // Close any open image when switching states
+    useEffect(() => {
+        onImageSelect(null);
+    }, [activeState, onImageSelect]);
+
+    const selectedCity = useMemo(() => {
+        if (!resolvedSelectedCityId) return null;
+        return sortedCities.find(c => c.id === resolvedSelectedCityId) || null;
+    }, [resolvedSelectedCityId, sortedCities]);
+
+    const fallbackGalleryImages: GalleryImage[] = useMemo(() => {
         if (!selectedCity) return [];
+        if (selectedCity.galleryImages && selectedCity.galleryImages.length > 0) {
+            return selectedCity.galleryImages;
+        }
         return [
-            { id: "1", url: `https://picsum.photos/400/300?random=${selectedCity.id}-1`, caption: `${selectedCity.name} - View 1` },
-            { id: "2", url: `https://picsum.photos/400/300?random=${selectedCity.id}-2`, caption: `${selectedCity.name} - View 2` },
-            { id: "3", url: `https://picsum.photos/400/300?random=${selectedCity.id}-3`, caption: `${selectedCity.name} - View 3` },
+            { id: `${selectedCity.id}-1`, url: getTemporaryGalleryImage(selectedCity.name, 1), caption: `${selectedCity.name} - View 1` },
+            { id: `${selectedCity.id}-2`, url: getTemporaryGalleryImage(selectedCity.name, 2), caption: `${selectedCity.name} - View 2` },
+            { id: `${selectedCity.id}-3`, url: getTemporaryGalleryImage(selectedCity.name, 3), caption: `${selectedCity.name} - View 3` },
         ];
     }, [selectedCity]);
+
+    const galleryCacheKey = selectedCity && stateData
+        ? `${countryId}:${stateData.id}:${selectedCity.id}`
+        : null;
+
+    useEffect(() => {
+        if (!selectedCity || !stateData || !galleryCacheKey) {
+            return;
+        }
+
+        let cancelled = false;
+        const params = new URLSearchParams({
+            countryId,
+            stateId: stateData.id,
+            cityId: selectedCity.id,
+        });
+
+        const fetchGallery = () => {
+            setPendingGalleryKeys((current) => ({
+                ...current,
+                [galleryCacheKey]: true,
+            }));
+
+            fetch(`${APP_BASE_PATH}/api/gallery?${params.toString()}`, { cache: "no-store" })
+                .then(async (response) => {
+                    if (!response.ok) {
+                        throw new Error(`Gallery request failed with status ${response.status}`);
+                    }
+                    return response.json() as Promise<{ images?: GalleryImage[] }>;
+                })
+                .then((payload) => {
+                    if (cancelled) return;
+                    const images = Array.isArray(payload.images) ? payload.images : [];
+                    setGalleryCache((current) => ({
+                        ...current,
+                        [galleryCacheKey]: images,
+                    }));
+                })
+                .catch(() => {
+                    if (cancelled) return;
+                    setGalleryCache((current) => ({
+                        ...current,
+                        [galleryCacheKey]: current[galleryCacheKey] ?? [],
+                    }));
+                })
+                .finally(() => {
+                    if (cancelled) return;
+                    setPendingGalleryKeys((current) => {
+                        if (!current[galleryCacheKey]) {
+                            return current;
+                        }
+
+                        const next = { ...current };
+                        delete next[galleryCacheKey];
+                        return next;
+                    });
+                });
+        };
+
+        fetchGallery();
+        const intervalId = window.setInterval(fetchGallery, 60000);
+
+        return () => {
+            cancelled = true;
+            window.clearInterval(intervalId);
+        };
+    }, [countryId, galleryCacheKey, selectedCity, stateData]);
+
+    const remoteGalleryImages = galleryCacheKey ? (galleryCache[galleryCacheKey] ?? null) : null;
+    const isGalleryLoading = Boolean(
+        galleryCacheKey &&
+        pendingGalleryKeys[galleryCacheKey] &&
+        !galleryCache[galleryCacheKey]
+    );
+
+    const galleryImages = remoteGalleryImages && remoteGalleryImages.length > 0
+        ? remoteGalleryImages
+        : fallbackGalleryImages;
 
     // Notify parent of gallery images changes
     useEffect(() => {
@@ -97,7 +188,7 @@ export default function Sidebar({ activeState, stateData, onClose, layout, onGal
                         {stateData.cities.length > 0 && (
                             <div className="mb-2.5 sm:mb-4 p-2 sm:p-2.5 md:p-3 bg-amber-50 border border-amber-100 rounded-lg">
                                 <p className="text-[9px] sm:text-[11px] md:text-xs font-semibold text-amber-900">
-                                    Cities Visited: <span className="text-base sm:text-lg md:text-xl font-bold text-amber-600">{visitedCitiesCount}</span>
+                                    Destinations Visited: <span className="text-base sm:text-lg md:text-xl font-bold text-amber-600">{visitedCitiesCount}</span>
                                 </p>
                             </div>
                         )}
@@ -107,11 +198,11 @@ export default function Sidebar({ activeState, stateData, onClose, layout, onGal
                                 {/* City Selector */}
                                 <div>
                                     <label htmlFor="city-select" className="text-[9px] sm:text-[10px] font-bold text-neutral-400 uppercase tracking-[0.2em] block mb-1 sm:mb-2">
-                                        Select City
+                                        Select Destination
                                     </label>
                                     <select
                                         id="city-select"
-                                        value={selectedCityId || ""}
+                                        value={resolvedSelectedCityId || ""}
                                         onChange={(e) => setSelectedCityId(e.target.value)}
                                         disabled={sortedCities.length === 0}
                                         className="w-full px-2.5 py-1.5 sm:px-3 sm:py-2 bg-neutral-50 border border-neutral-200 rounded-lg text-xs sm:text-sm text-neutral-900 font-medium focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
@@ -126,14 +217,7 @@ export default function Sidebar({ activeState, stateData, onClose, layout, onGal
 
                                 {/* City Detail */}
                                 {selectedCity && (
-                                    <motion.div
-                                        key={selectedCityId}
-                                        initial={{ opacity: 0, y: 10 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        exit={{ opacity: 0, y: -10 }}
-                                        transition={{ duration: 0.2 }}
-                                        className="space-y-2.5 sm:space-y-4 pt-2 sm:pt-3"
-                                    >
+                                    <div className="space-y-2.5 sm:space-y-4 pt-2 sm:pt-3">
                                         <div>
                                             <h3 className="text-[9px] sm:text-[10px] font-bold text-neutral-400 uppercase tracking-[0.2em] block mb-1 sm:mb-2">
                                                 About {selectedCity.name}
@@ -153,22 +237,22 @@ export default function Sidebar({ activeState, stateData, onClose, layout, onGal
                                                 </p>
                                             </div>
                                         )}
-                                    </motion.div>
+                                    </div>
                                 )}
 
                                 {/* City Gallery */}
                                 {selectedCity && galleryImages.length > 0 && (
-                                    <motion.div
-                                        key={`gallery-${selectedCityId}`}
-                                        initial={{ opacity: 0, y: 10 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        exit={{ opacity: 0, y: -10 }}
-                                        transition={{ duration: 0.2, delay: 0.1 }}
-                                        className="pt-2.5 sm:pt-4 border-t border-neutral-100"
-                                    >
-                                        <h3 className="text-[9px] sm:text-[10px] font-bold text-neutral-400 uppercase tracking-[0.2em] block mb-2 sm:mb-3">
-                                            Gallery
-                                        </h3>
+                                    <div className="pt-2.5 sm:pt-4 border-t border-neutral-100">
+                                        <div className="flex items-center justify-between gap-3 mb-2 sm:mb-3">
+                                            <h3 className="text-[9px] sm:text-[10px] font-bold text-neutral-400 uppercase tracking-[0.2em] block">
+                                                Gallery
+                                            </h3>
+                                            {isGalleryLoading && (
+                                                <span className="text-[9px] sm:text-[10px] text-neutral-400 uppercase tracking-[0.18em]">
+                                                    Syncing Photos
+                                                </span>
+                                            )}
+                                        </div>
                                         <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
                                             {galleryImages.map((image, index) => (
                                                 <motion.button
@@ -178,18 +262,17 @@ export default function Sidebar({ activeState, stateData, onClose, layout, onGal
                                                     aria-label={`View ${image.caption}`}
                                                     className="group relative aspect-square rounded-lg overflow-hidden border border-neutral-200 hover:border-amber-400 transition-all duration-200 bg-neutral-100"
                                                 >
-                                                    <Image
+                                                    <img
                                                         src={image.url}
                                                         alt={image.caption}
-                                                        fill
-                                                        className="object-cover group-hover:brightness-110 transition-all duration-200"
-                                                        sizes="(max-width: 768px) 100px, 120px"
+                                                        className="absolute inset-0 h-full w-full object-cover group-hover:brightness-110 transition-all duration-200"
+                                                        loading="lazy"
                                                     />
                                                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-all duration-200" />
                                                 </motion.button>
                                             ))}
                                         </div>
-                                    </motion.div>
+                                    </div>
                                 )}
                             </div>
                         )}

@@ -15,7 +15,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  basePath: "/tabibito",
+  // Keep /tabibito on deployed builds, but use / in local development.
+  basePath: process.env.NODE_ENV === "production" ? "/tabibito" : "",
 
 
   images: {

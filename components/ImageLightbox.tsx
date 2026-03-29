@@ -3,7 +3,6 @@
 import { GalleryImage } from "@/types";
 import { AnimatePresence, motion } from "framer-motion";
 import { X, ChevronLeft, ChevronRight } from "lucide-react";
-import Image from "next/image";
 import { useEffect } from "react";
 
 type Props = {
@@ -63,12 +62,10 @@ export default function ImageLightbox({ selectedImageIndex, onClose, onPrevImage
 
                         <div className="relative w-full bg-neutral-100 rounded-t-lg overflow-hidden">
                             <div className="relative aspect-[4/3] sm:aspect-square">
-                                <Image
+                                <img
                                     src={galleryImages[selectedImageIndex].url}
                                     alt={galleryImages[selectedImageIndex].caption}
-                                    fill
-                                    className="object-cover"
-                                    priority
+                                    className="absolute inset-0 h-full w-full object-cover"
                                 />
                             </div>
 

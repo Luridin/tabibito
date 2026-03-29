@@ -19,6 +19,8 @@ export interface CityData {
     description: string;
     visited: boolean;
     imageUrl?: string;
+    photoFolder?: string;
+    galleryImages?: GalleryImage[];
 }
 
 export interface StateData extends Location {
@@ -30,7 +32,7 @@ export interface Country {
     id: string;
     name: string;
     flag: string;
-    mapUrl: string;
+    mapUrl?: string;
 }
 
 export interface TravelData {
