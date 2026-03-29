@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { GetObjectCommand, ListObjectsV2Command, NoSuchKey, S3Client } from "@aws-sdk/client-s3";
 import { TRAVEL_DATA } from "@/data/locations";
+import { TRIP_PHOTO_BASE_URL } from "@/lib/constants";
 import { GalleryImage, CityData, StateData } from "@/types";
 
 export const runtime = "nodejs";
@@ -148,6 +149,29 @@ function getS3Client() {
   });
 }
 
+function getMissingConfig() {
+  const missing = [];
+
+  if (!process.env.R2_BUCKET_NAME) {
+    missing.push("R2_BUCKET_NAME");
+  }
+
+  const hasEndpoint = Boolean(process.env.R2_ENDPOINT || process.env.R2_ACCOUNT_ID);
+  if (!hasEndpoint) {
+    missing.push("R2_ENDPOINT or R2_ACCOUNT_ID");
+  }
+
+  if (!process.env.R2_ACCESS_KEY_ID) {
+    missing.push("R2_ACCESS_KEY_ID");
+  }
+
+  if (!process.env.R2_SECRET_ACCESS_KEY) {
+    missing.push("R2_SECRET_ACCESS_KEY");
+  }
+
+  return missing;
+}
+
 export async function GET(request: NextRequest) {
   const countryId = request.nextUrl.searchParams.get("countryId");
   const stateId = request.nextUrl.searchParams.get("stateId");
@@ -163,12 +187,13 @@ export async function GET(request: NextRequest) {
   }
 
   const bucketName = process.env.R2_BUCKET_NAME;
-  const publicBaseUrl = process.env.R2_PUBLIC_BASE_URL ?? process.env.NEXT_PUBLIC_TRIP_PHOTO_BASE_URL;
+  const publicBaseUrl = process.env.R2_PUBLIC_BASE_URL ?? process.env.NEXT_PUBLIC_TRIP_PHOTO_BASE_URL ?? TRIP_PHOTO_BASE_URL;
   const client = getS3Client();
 
-  if (!bucketName || !publicBaseUrl || !client) {
+  if (!bucketName || !client) {
+    const missing = getMissingConfig();
     return NextResponse.json(
-      { images: [], configured: false, prefix: getPhotoPrefixes(lookup)[0] ?? null },
+      { images: [], configured: false, prefix: getPhotoPrefixes(lookup)[0] ?? null, missing },
       {
         headers: {
           "Cache-Control": "no-store",

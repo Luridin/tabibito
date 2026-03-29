@@ -86,18 +86,27 @@ export default function Sidebar({ countryId, activeState, stateData, onClose, la
                     if (!response.ok) {
                         throw new Error(`Gallery request failed with status ${response.status}`);
                     }
-                    return response.json() as Promise<{ images?: GalleryImage[] }>;
+                    return response.json() as Promise<{ images?: GalleryImage[]; configured?: boolean; missing?: string[] }>;
                 })
                 .then((payload) => {
                     if (cancelled) return;
+
+                    if (payload.configured === false) {
+                        const missingText = Array.isArray(payload.missing) && payload.missing.length > 0
+                            ? ` Missing env vars: ${payload.missing.join(", ")}`
+                            : "";
+                        console.warn(`Gallery API is not configured.${missingText}`);
+                    }
+
                     const images = Array.isArray(payload.images) ? payload.images : [];
                     setGalleryCache((current) => ({
                         ...current,
                         [galleryCacheKey]: images,
                     }));
                 })
-                .catch(() => {
+                .catch((error) => {
                     if (cancelled) return;
+                    console.warn("Gallery fetch failed:", error);
                     setGalleryCache((current) => ({
                         ...current,
                         [galleryCacheKey]: current[galleryCacheKey] ?? [],
