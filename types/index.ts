@@ -4,41 +4,48 @@ export interface GalleryImage {
     caption: string;
 }
 
-export interface Location {
-    id: string;
-    name: string;
-    description: string;
-    imageUrl?: string;
-    visited: boolean;
-    dateVisited?: string;
+export interface DestinationOption {
+    key: string;
+    countryId: string;
+    countryName: string;
+    destination: DestinationData;
 }
 
-export interface CityData {
+export interface DestinationContentResponse {
+    images: GalleryImage[];
+    experience: string;
+    experienceFormat: "markdown" | "text" | "none";
+    configured: boolean;
+    prefix: string | null;
+    missing?: string[];
+}
+
+export interface JournalPageData {
+    countries: Country[];
+    destinationsByCountry: Record<string, DestinationOption[]>;
+    totalDestinations: number;
+    totalCountries: number;
+}
+
+export interface DestinationData {
     id: string;
     name: string;
     description: string;
     visited: boolean;
-    imageUrl?: string;
+    travelOrder?: number;
     photoFolder?: string;
-    galleryImages?: GalleryImage[];
-}
-
-export interface StateData extends Location {
-    cities: CityData[];
-    geoId: string;
 }
 
 export interface Country {
     id: string;
     name: string;
     flag: string;
-    mapUrl?: string;
 }
 
 export interface TravelData {
     [countryId: string]: {
-        states: {
-            [stateId: string]: StateData;
+        destinations: {
+            [destinationId: string]: DestinationData;
         };
     };
 }

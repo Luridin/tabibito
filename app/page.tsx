@@ -1,5 +1,8 @@
 import TabibitoApp from "@/components/TabibitoApp";
+import { getJournalPageData } from "@/lib/journal";
 
 export default function Home() {
-  return <TabibitoApp />;
+  const journalData = getJournalPageData();
+
+  return <TabibitoApp journalData={journalData} />;
 }

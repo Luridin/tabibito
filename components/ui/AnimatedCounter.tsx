@@ -8,25 +8,30 @@ type AnimatedCounterProps = {
 };
 
 export default function AnimatedCounter({ value, durationMs = 700 }: AnimatedCounterProps) {
+    const normalizedValue = Math.max(0, Math.floor(value));
     const [displayValue, setDisplayValue] = useState(0);
     const previousValueRef = useRef(0);
 
     useEffect(() => {
         const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
         const from = previousValueRef.current;
-        const to = Math.max(0, Math.floor(value));
+        const to = normalizedValue;
+
+        let rafId = 0;
 
         if (prefersReducedMotion || from === to) {
-            setDisplayValue(to);
-            previousValueRef.current = to;
-            return;
+            rafId = requestAnimationFrame(() => {
+                setDisplayValue(to);
+                previousValueRef.current = to;
+            });
+
+            return () => cancelAnimationFrame(rafId);
         }
 
         const delta = Math.abs(to - from);
         const maxStepPerFrame = Math.max(1, Math.ceil(delta / 90));
         const start = performance.now();
 
-        let rafId = 0;
         let current = from;
 
         const tick = (now: number) => {
@@ -51,7 +56,7 @@ export default function AnimatedCounter({ value, durationMs = 700 }: AnimatedCou
         rafId = requestAnimationFrame(tick);
 
         return () => cancelAnimationFrame(rafId);
-    }, [value, durationMs]);
+    }, [normalizedValue, durationMs]);
 
     return <>{displayValue}</>;
 }

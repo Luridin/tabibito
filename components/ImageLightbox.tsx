@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { GalleryImage } from "@/types";
 import { AnimatePresence, motion } from "framer-motion";
 import { X, ChevronLeft, ChevronRight } from "lucide-react";
@@ -42,29 +43,31 @@ export default function ImageLightbox({ selectedImageIndex, onClose, onPrevImage
                     role="dialog"
                     aria-modal="true"
                     aria-label="Image lightbox"
-                    className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-3 sm:p-4"
+                    className="fixed inset-0 z-[100] flex items-center justify-center bg-[rgba(43,25,5,0.86)] p-3 sm:p-4"
                     onClick={onClose}
                 >
                     <motion.div
-                        initial={{ scale: 0.9, opacity: 0 }}
+                        initial={{ scale: 0.96, opacity: 0, y: 10 }}
                         animate={{ scale: 1, opacity: 1 }}
-                        exit={{ scale: 0.9, opacity: 0 }}
-                        className="relative bg-white rounded-lg shadow-2xl max-w-4xl w-full max-h-[90vh] max-h-[90dvh] overflow-y-auto"
+                        exit={{ scale: 0.96, opacity: 0, y: 10 }}
+                        className="relative max-h-[90vh] max-h-[90dvh] w-full max-w-5xl overflow-y-auto border-4 border-[var(--journal-line)] bg-[var(--journal-paper)] shadow-[10px_10px_0_var(--journal-shadow)]"
                         onClick={(e) => e.stopPropagation()}
                     >
                         <button
                             onClick={onClose}
-                            className="absolute top-2 right-2 z-10 bg-black/50 hover:bg-black/70 text-white hover:text-amber-400 transition-colors rounded-full p-1.5"
+                            className="absolute right-3 top-3 z-10 border-4 border-[var(--journal-line)] bg-[var(--journal-paper-strong)] p-2 text-[var(--journal-ink)] transition-transform hover:-translate-y-0.5"
                             aria-label="Close lightbox"
                         >
-                            <X size={24} />
+                            <X size={20} />
                         </button>
 
-                        <div className="relative w-full bg-neutral-100 rounded-t-lg overflow-hidden">
-                            <div className="relative aspect-[4/3] sm:aspect-square">
-                                <img
+                        <div className="relative w-full overflow-hidden border-b-4 border-[var(--journal-line)] bg-[var(--journal-paper-strong)]">
+                            <div className="relative aspect-[4/3] sm:aspect-[16/10]">
+                                <Image
                                     src={galleryImages[selectedImageIndex].url}
                                     alt={galleryImages[selectedImageIndex].caption}
+                                    fill
+                                    sizes="100vw"
                                     className="absolute inset-0 h-full w-full object-cover"
                                 />
                             </div>
@@ -77,7 +80,7 @@ export default function ImageLightbox({ selectedImageIndex, onClose, onPrevImage
                                             e.stopPropagation();
                                             onPrevImage();
                                         }}
-                                        className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white text-neutral-900 rounded-full p-1.5 sm:p-2 transition-all"
+                                        className="absolute left-3 top-1/2 -translate-y-1/2 border-4 border-[var(--journal-line)] bg-[var(--journal-paper)] p-2 text-[var(--journal-ink)] transition-all sm:left-4"
                                         aria-label="Previous image"
                                     >
                                         <ChevronLeft className="w-5 h-5 sm:w-6 sm:h-6" />
@@ -88,7 +91,7 @@ export default function ImageLightbox({ selectedImageIndex, onClose, onPrevImage
                                             e.stopPropagation();
                                             onNextImage();
                                         }}
-                                        className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white text-neutral-900 rounded-full p-1.5 sm:p-2 transition-all"
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 border-4 border-[var(--journal-line)] bg-[var(--journal-paper)] p-2 text-[var(--journal-ink)] transition-all sm:right-4"
                                         aria-label="Next image"
                                     >
                                         <ChevronRight className="w-5 h-5 sm:w-6 sm:h-6" />
@@ -96,15 +99,22 @@ export default function ImageLightbox({ selectedImageIndex, onClose, onPrevImage
                                 </>
                             )}
 
-                            <div className="absolute bottom-4 right-4 bg-black/60 text-white px-3 py-1 rounded text-sm font-medium">
-                                {selectedImageIndex + 1} / {galleryImages.length}
+                            <div className="absolute bottom-4 right-4 border-4 border-[var(--journal-line)] bg-[var(--journal-paper)] px-3 py-2">
+                                <p className="pixel-label !text-[9px] text-[var(--journal-muted)]">
+                                    Photo {selectedImageIndex + 1} / {galleryImages.length}
+                                </p>
                             </div>
                         </div>
 
-                        <div className="p-4 sm:p-6">
-                            <h3 className="text-base sm:text-lg font-semibold text-neutral-900 mb-2">
+                        <div className="space-y-3 p-4 sm:p-6">
+                            <p className="pixel-label">Photo Description</p>
+                            <h3 className="pixel-heading text-xs text-[var(--journal-ink)] sm:text-sm">
                                 {galleryImages[selectedImageIndex].caption}
                             </h3>
+                            <p className="text-sm leading-7 text-[var(--journal-muted)] sm:text-base">
+                                This description is loaded from the destination caption manifest in your
+                                R2 bucket.
+                            </p>
                         </div>
                     </motion.div>
                 </motion.div>

@@ -186,6 +186,17 @@ function cityDescription(city, state, country) {
   return `Visited ${city} in ${state}, ${country}.`;
 }
 
+function normalizeHeader(value = "") {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function findColumnIndex(headers, aliases, fallbackIndex) {
+  const normalizedHeaders = headers.map((header) => normalizeHeader(header));
+  const aliasSet = new Set(aliases.map((alias) => normalizeHeader(alias)));
+  const index = normalizedHeaders.findIndex((header) => aliasSet.has(header));
+  return index >= 0 ? index : fallbackIndex;
+}
+
 const xml = execFileSync("unzip", ["-p", odsPath, "content.xml"], {
   encoding: "utf8",
   maxBuffer: 20 * 1024 * 1024,
@@ -198,15 +209,26 @@ if (!sheetMatch) {
 }
 
 const rows = readRows(sheetMatch[0]);
+const headerCells = readCells(rows[0]);
+const countryColumn = findColumnIndex(headerCells, ["Country"], 1);
+const stateColumn = findColumnIndex(headerCells, ["State", "Region", "Province"], 2);
+const cityColumn = findColumnIndex(headerCells, ["City", "Destination", "Place"], 3);
+const travelOrderColumn = findColumnIndex(headerCells, ["Travel Order", "TravelOrder", "Order"], 0);
 const travelData = {};
+let fallbackTravelOrder = 1;
 
 for (const row of rows.slice(1)) {
   const cells = readCells(row);
 
-  const countryRaw = cells[1];
-  const stateRaw = cells[2];
-  const cityRaw = cells[3];
+  const countryRaw = cells[countryColumn];
+  const stateRaw = cells[stateColumn];
+  const cityRaw = cells[cityColumn];
+  const travelOrderRaw = cells[travelOrderColumn];
   if (!countryRaw || !stateRaw || !cityRaw) continue;
+
+  const parsedTravelOrder = Number.parseInt(String(travelOrderRaw ?? "").trim(), 10);
+  const travelOrder = Number.isFinite(parsedTravelOrder) ? parsedTravelOrder : fallbackTravelOrder;
+  fallbackTravelOrder += 1;
 
   const country = countryRaw.trim();
   const state = stateFixes[stateRaw.trim()] || stateRaw.trim();
@@ -231,24 +253,47 @@ for (const row of rows.slice(1)) {
     };
   }
 
-  if (!travelData[countryId].states[stateId].cities.some((existingCity) => existingCity.name === city)) {
+  const existingCity = travelData[countryId].states[stateId].cities.find((entry) => entry.name === city);
+
+  if (!existingCity) {
     travelData[countryId].states[stateId].cities.push({
       id: toCityId(city),
       name: city,
       description: cityDescription(city, state, country),
       visited: true,
+      travelOrder,
     });
+  } else if (existingCity.travelOrder === undefined || travelOrder < existingCity.travelOrder) {
+    existingCity.travelOrder = travelOrder;
   }
 }
 
 for (const country of Object.values(travelData)) {
   for (const state of Object.values(country.states)) {
-    state.cities.sort((left, right) => left.name.localeCompare(right.name));
+    state.cities.sort((left, right) => {
+      const leftOrder = left.travelOrder ?? Number.MAX_SAFE_INTEGER;
+      const rightOrder = right.travelOrder ?? Number.MAX_SAFE_INTEGER;
+
+      if (leftOrder !== rightOrder) {
+        return leftOrder - rightOrder;
+      }
+
+      return left.name.localeCompare(right.name);
+    });
   }
 }
 
 for (const countryId of Object.keys(travelData).sort()) {
-  const sortedStates = Object.values(travelData[countryId].states).sort((left, right) => left.name.localeCompare(right.name));
+  const sortedStates = Object.values(travelData[countryId].states).sort((left, right) => {
+    const leftOrder = Math.min(...left.cities.map((city) => city.travelOrder ?? Number.MAX_SAFE_INTEGER));
+    const rightOrder = Math.min(...right.cities.map((city) => city.travelOrder ?? Number.MAX_SAFE_INTEGER));
+
+    if (leftOrder !== rightOrder) {
+      return leftOrder - rightOrder;
+    }
+
+    return left.name.localeCompare(right.name);
+  });
   travelData[countryId].states = Object.fromEntries(sortedStates.map((state) => [state.id, state]));
 }
 

@@ -1,39 +1,46 @@
 import { NextRequest, NextResponse } from "next/server";
 import { GetObjectCommand, ListObjectsV2Command, NoSuchKey, S3Client } from "@aws-sdk/client-s3";
-import { TRAVEL_DATA } from "@/data/locations";
-import { TRIP_PHOTO_BASE_URL } from "@/lib/constants";
-import { GalleryImage, CityData, StateData } from "@/types";
+import { COUNTRIES, TRAVEL_DATA } from "@/data/locations";
+import { DestinationData } from "@/types";
 
 export const runtime = "nodejs";
 
 type RouteLookup = {
   countryId: string;
-  city: CityData;
-  state: StateData;
   countryName: string;
+  destination: DestinationData;
 };
 
 const IMAGE_EXTENSIONS = /\.(avif|gif|jpe?g|png|webp)$/i;
 const CAPTIONS_FILE_NAME = "captions.json";
+const EXPERIENCE_FILE_NAMES = [
+  "experience.md",
+  "experience.txt",
+  "travel-experience.md",
+  "travel-experience.txt",
+];
 
 type CaptionManifest = Record<string, string>;
+type ExperiencePayload = {
+  body: string;
+  format: "markdown" | "text" | "none";
+};
 
-function getCityRecord(countryId: string, stateId: string, cityId: string): RouteLookup | null {
+function getCountryName(countryId: string) {
+  return COUNTRIES.find((country) => country.id === countryId)?.name ?? countryId;
+}
+
+function getDestinationRecord(countryId: string, destinationId: string): RouteLookup | null {
   const country = TRAVEL_DATA[countryId];
   if (!country) return null;
 
-  const state = country.states[stateId];
-  if (!state) return null;
-
-  const city = state.cities.find((entry) => entry.id === cityId);
-  if (!city) return null;
+  const destination = country.destinations[destinationId];
+  if (!destination) return null;
 
   return {
     countryId,
-    city,
-    state,
-    countryName:
-      countryId === "IN" ? "India" : countryId === "TH" ? "Thailand" : countryId === "AE" ? "UAE" : countryId,
+    countryName: getCountryName(countryId),
+    destination,
   };
 }
 
@@ -55,10 +62,11 @@ function buildPublicUrl(baseUrl: string, objectKey: string) {
 
 function getPhotoPrefixes(record: RouteLookup) {
   return [...new Set([
-    record.city.photoFolder,
-    `${record.countryName}/${record.state.name}/${record.city.name}`,
-    `${record.countryId}/${record.state.id}/${record.city.name}`,
-    `${record.countryId}/${record.state.id}/${record.city.id}`,
+    record.destination.photoFolder,
+    `${record.countryName}/${record.destination.name}`,
+    `${record.countryName}/${record.destination.id}`,
+    `${record.countryId}/${record.destination.name}`,
+    `${record.countryId}/${record.destination.id}`,
   ].filter((value): value is string => Boolean(value)).map(normalizePrefix))];
 }
 
@@ -118,14 +126,58 @@ async function getCaptionManifest(client: S3Client, bucketName: string, prefix: 
   }
 }
 
+async function readTextObject(client: S3Client, bucketName: string, objectKey: string) {
+  const response = await client.send(
+    new GetObjectCommand({
+      Bucket: bucketName,
+      Key: objectKey,
+    })
+  );
+
+  return (await response.Body?.transformToString())?.trim() ?? "";
+}
+
+async function getExperienceContent(
+  client: S3Client,
+  bucketName: string,
+  keys: string[],
+  lookup: RouteLookup
+): Promise<ExperiencePayload> {
+  const preferredNames = [
+    `${lookup.destination.name}.md`,
+    `${lookup.destination.id}.md`,
+    ...EXPERIENCE_FILE_NAMES,
+  ];
+
+  const preferredKey = preferredNames
+    .map((fileName) => keys.find((key) => key.endsWith(`/${fileName}`)))
+    .find((key): key is string => Boolean(key));
+
+  const fallbackKey = keys.find((key) => /\.(md|txt)$/i.test(key));
+  const objectKey = preferredKey || fallbackKey;
+
+  if (!objectKey) {
+    return {
+      body: "",
+      format: "none",
+    };
+  }
+
+  const body = await readTextObject(client, bucketName, objectKey);
+  return {
+    body,
+    format: objectKey.endsWith(".md") ? "markdown" : "text",
+  };
+}
+
 function toGalleryImages(keys: string[], lookup: RouteLookup, publicBaseUrl: string, captionManifest: CaptionManifest) {
   return keys
     .filter((key) => IMAGE_EXTENSIONS.test(key))
     .sort((left, right) => left.localeCompare(right, undefined, { numeric: true, sensitivity: "base" }))
     .map((key, index) => ({
-      id: `${lookup.city.id}-${index + 1}`,
+      id: `${lookup.destination.id}-${index + 1}`,
       url: buildPublicUrl(publicBaseUrl, key),
-      caption: captionManifest[key] ?? captionManifest[getObjectName(key)] ?? `${lookup.city.name} - ${index + 1}`,
+      caption: captionManifest[key] ?? captionManifest[getObjectName(key)] ?? `${lookup.destination.name} - ${index + 1}`,
     }));
 }
 
@@ -156,6 +208,10 @@ function getMissingConfig() {
     missing.push("R2_BUCKET_NAME");
   }
 
+  if (!process.env.R2_PUBLIC_BASE_URL && !process.env.NEXT_PUBLIC_TRIP_PHOTO_BASE_URL) {
+    missing.push("R2_PUBLIC_BASE_URL or NEXT_PUBLIC_TRIP_PHOTO_BASE_URL");
+  }
+
   const hasEndpoint = Boolean(process.env.R2_ENDPOINT || process.env.R2_ACCOUNT_ID);
   if (!hasEndpoint) {
     missing.push("R2_ENDPOINT or R2_ACCOUNT_ID");
@@ -174,26 +230,32 @@ function getMissingConfig() {
 
 export async function GET(request: NextRequest) {
   const countryId = request.nextUrl.searchParams.get("countryId");
-  const stateId = request.nextUrl.searchParams.get("stateId");
-  const cityId = request.nextUrl.searchParams.get("cityId");
+  const destinationId = request.nextUrl.searchParams.get("destinationId");
 
-  if (!countryId || !stateId || !cityId) {
-    return NextResponse.json({ error: "countryId, stateId, and cityId are required." }, { status: 400 });
+  if (!countryId || !destinationId) {
+    return NextResponse.json({ error: "countryId and destinationId are required." }, { status: 400 });
   }
 
-  const lookup = getCityRecord(countryId, stateId, cityId);
+  const lookup = getDestinationRecord(countryId, destinationId);
   if (!lookup) {
-    return NextResponse.json({ error: "City not found." }, { status: 404 });
+    return NextResponse.json({ error: "Destination not found." }, { status: 404 });
   }
 
   const bucketName = process.env.R2_BUCKET_NAME;
-  const publicBaseUrl = process.env.R2_PUBLIC_BASE_URL ?? process.env.NEXT_PUBLIC_TRIP_PHOTO_BASE_URL ?? TRIP_PHOTO_BASE_URL;
+  const publicBaseUrl = process.env.R2_PUBLIC_BASE_URL ?? process.env.NEXT_PUBLIC_TRIP_PHOTO_BASE_URL ?? null;
   const client = getS3Client();
 
-  if (!bucketName || !client) {
+  if (!bucketName || !publicBaseUrl || !client) {
     const missing = getMissingConfig();
     return NextResponse.json(
-      { images: [], configured: false, prefix: getPhotoPrefixes(lookup)[0] ?? null, missing },
+      {
+        images: [],
+        experience: "",
+        experienceFormat: "none",
+        configured: false,
+        prefix: getPhotoPrefixes(lookup)[0] ?? null,
+        missing,
+      },
       {
         headers: {
           "Cache-Control": "no-store",
@@ -226,14 +288,18 @@ export async function GET(request: NextRequest) {
 
       const captionManifest = await getCaptionManifest(client, bucketName, prefix);
       const images = toGalleryImages(keys, lookup, publicBaseUrl, captionManifest);
+      const experience = await getExperienceContent(client, bucketName, keys, lookup);
 
       return NextResponse.json(
-        { images, configured: true, prefix },
+        {
+          images,
+          experience: experience.body,
+          experienceFormat: experience.format,
+          configured: true,
+          prefix,
+        },
         {
           headers: {
-            // Cache successful responses for 60s, serve stale for up to 5min
-            // while revalidating in the background. Cuts R2 Class B ops and
-            // Vercel function invocations dramatically under repeated/bot traffic.
             "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300",
           },
         }
@@ -241,21 +307,31 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json(
-      { images: [], configured: true, prefix: prefixes[0] ?? null },
+      {
+        images: [],
+        experience: "",
+        experienceFormat: "none",
+        configured: true,
+        prefix: prefixes[0] ?? null,
+      },
       {
         headers: {
-          // Empty result — cache briefly so bots don't hammer missing cities
           "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300",
         },
       }
     );
   } catch {
     return NextResponse.json(
-      { images: [], configured: true, prefix: prefixes[0] ?? null },
+      {
+        images: [],
+        experience: "",
+        experienceFormat: "none",
+        configured: true,
+        prefix: prefixes[0] ?? null,
+      },
       {
         status: 500,
         headers: {
-          // Don't cache errors
           "Cache-Control": "no-store",
         },
       }
