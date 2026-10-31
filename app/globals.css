@@ -30,9 +30,10 @@ button:focus-visible, a:focus-visible, select:focus-visible { outline: 2px solid
 .wordmark-dot { width: 6px; height: 6px; border-radius: 50%; background: #bdbdb5; }
 .travel-stats { display: flex; align-items: center; gap: 24px; margin-left: auto; }
 .stat { display: flex; align-items: baseline; gap: 9px; }
-.stat-value { font-size: 24px; font-weight: 400; letter-spacing: -1px; font-variant-numeric: tabular-nums; }
+.stat-value { font-size: 42px; font-weight: 800; line-height: 1.1; letter-spacing: -1.5px; font-variant-numeric: tabular-nums; }
+.animated-count { display: inline-block; text-align: right; }
 .stat-label { color: var(--muted); font-size: 11px; }
-.stat-divider { width: 1px; height: 23px; background: var(--border); }
+.stat-divider { width: 1px; height: 36px; background: var(--border); }
 .journal-main { max-width: 940px; margin: auto; padding: 64px 48px 0; }
 .route-filters { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 0; padding-bottom: 38px; border-bottom: 1px solid var(--border); }
 .filter-field label { display: flex; justify-content: space-between; margin-bottom: 11px; color: #c2c2be; font-size: 11px; }
@@ -49,7 +50,7 @@ select option { background: #151515; color: var(--text); }
 .section-heading h1 { margin: 0; font-size: 28px; line-height: 1.25; font-weight: 400; letter-spacing: -0.8px; overflow-wrap: anywhere; }
 .location-tag { display: inline-flex; flex-shrink: 0; align-items: center; gap: 6px; padding-bottom: 3px; color: var(--muted); font-size: 11px; }
 .carousel-stage { display: flex; justify-content: center; padding: 38px 16px 0; }
-.card-stack { position: relative; width: min(100%, 420px); }
+.card-stack { position: relative; width: min(100%, 560px); }
 .card-back { display: none; position: absolute; inset: 4px 4px 10px; border: 1px solid #292929; background: #101010; border-radius: 15px; pointer-events: none; }
 .card-stack[data-stacked="true"] .card-back { display: block; }
 .card-back-far { transform: rotate(4deg) translate(8px, 5px); }
@@ -72,7 +73,6 @@ select option { background: #151515; color: var(--text); }
 .carousel-position { display: flex; align-items: center; gap: 12px; color: #858581; font-size: 11px; font-variant-numeric: tabular-nums; }
 .carousel-position > span:first-child { color: #eee; }
 .position-divider { height: 1px; width: 23px; background: #494943; }
-.carousel-hint { margin: 18px 0 0; text-align: center; color: #858581; font-size: 10px; line-height: 1.8; }
 .gallery-empty { min-height: 440px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 14px; margin-top: 32px; padding: 40px 24px; border: 1px solid #242424; border-radius: 12px; background: #0d0d0d; }
 .gallery-empty > svg { color: #74746e; margin-bottom: 8px; }
 .gallery-empty h2, .gallery-empty h3 { font-size: 20px; font-weight: 400; letter-spacing: -0.5px; margin: 0; }
@@ -80,7 +80,7 @@ select option { background: #151515; color: var(--text); }
 .retry-button { display: inline-flex; align-items: center; gap: 8px; margin-top: 8px; background: #191919; border: 1px solid #393939; border-radius: 6px; padding: 11px 16px; font-size: 12px; color: #e0e0da; }
 .retry-button:hover { background: #292929; }
 .gallery-loading { padding-top: 38px; display: flex; align-items: center; flex-direction: column; gap: 20px; }
-.skeleton-card { width: min(100%, 420px); aspect-ratio: 3 / 4; border: 1px solid #272727; border-radius: 12px; background: linear-gradient(110deg,#101010 25%,#1b1b1b 45%,#101010 65%); background-size: 220% 100%; animation: shimmer 1.8s ease-in-out infinite; }
+.skeleton-card { width: min(100%, 560px); aspect-ratio: 3 / 4; border: 1px solid #272727; border-radius: 12px; background: linear-gradient(110deg,#101010 25%,#1b1b1b 45%,#101010 65%); background-size: 220% 100%; animation: shimmer 1.8s ease-in-out infinite; }
 .gallery-loading p { font-size: 12px; color: var(--muted); }
 .experience-section { margin-top: 57px; padding: 40px 0 64px; border-top: 1px solid var(--border); }
 .experience-toggle { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 48px; cursor: pointer; list-style: none; touch-action: manipulation; }
@@ -118,7 +118,7 @@ select option { background: #151515; color: var(--text); }
   .wordmark { font-size: 36px; min-height: 44px; align-items: center; }
   .travel-stats { gap: 14px; }
   .stat { flex-direction: column; gap: 4px; }
-  .stat-value { font-size: 21px; }
+  .stat-value { font-size: 34px; }
   .stat-label { font-size: 10px; }
   .journal-main { padding: 28px max(20px, env(safe-area-inset-right)) 0 max(20px, env(safe-area-inset-left)); }
   .route-filters { gap: 14px; padding-bottom: 24px; margin-top: 0; }
@@ -132,8 +132,8 @@ select option { background: #151515; color: var(--text); }
   .section-heading h1 { font-size: 26px; }
   .location-tag { flex-shrink: 1; line-height: 1.6; padding-top: 0; }
   .location-tag svg { flex-shrink: 0; }
-  .carousel-stage { padding: 26px 10px 0; }
-  .card-stack, .skeleton-card { width: min(100%, 400px, 43.5svh); }
+  .carousel-stage { padding: 26px 8px 0; margin-inline: -12px; }
+  .card-stack, .skeleton-card { width: min(100%, 480px, 51svh); }
   .card-back-far { transform: rotate(2deg) translate(5px, 3px); }
   .card-back-near { transform: rotate(-2deg) translate(-4px, 2px); }
   .photo-card { padding: 6px 6px 0; box-shadow: 0 12px 30px #0006; }
@@ -142,8 +142,7 @@ select option { background: #151515; color: var(--text); }
   .carousel-controls { margin-top: 22px; gap: 32px; }
   .arrow-button { width: 50px; height: 50px; }
   .carousel-position { font-size: 12px; }
-  .carousel-hint { font-size: 11px; margin-top: 12px; }
-  .gallery-loading { padding: 26px 10px 0; }
+  .gallery-loading { padding: 26px 8px 0; margin-inline: -12px; }
   .gallery-empty { min-height: 280px; margin-top: 24px; padding: 30px 20px; }
   .retry-button { min-height: 48px; }
   .experience-section { margin-top: 32px; padding: 28px 0 40px; }
@@ -163,7 +162,7 @@ select option { background: #151515; color: var(--text); }
   .header-inner { gap: 12px; }
   .wordmark { font-size: 29px; }
   .travel-stats { gap: 11px; }
-  .stat-value { font-size: 20px; }
+  .stat-value { font-size: 30px; }
   .stat-label { font-size: 10px; }
   .site-footer { gap: 10px; }
 }

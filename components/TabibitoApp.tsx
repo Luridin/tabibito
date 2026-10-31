@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import Image from "next/image";
+import AnimatedCount from "@/components/AnimatedCount";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { ArrowLeft, ArrowRight, ChevronDown, ImageOff, MapPin, RefreshCw } from "lucide-react";
 import { APP_BASE_PATH } from "@/lib/constants";
@@ -115,7 +116,7 @@ function Photo({ image }: { image: GalleryImage }) {
       src={image.url}
       alt={image.caption}
       fill
-      sizes="(max-height: 500px) and (orientation: landscape) and (max-width: 1000px) 35svh, (max-width: 700px) min(86vw, 43.5svh, 400px), 420px"
+      sizes="(max-height: 500px) and (orientation: landscape) and (max-width: 1000px) 35svh, (max-width: 700px) min(94vw, 51svh, 480px), 560px"
       className="gallery-photo"
       onError={() => setFailed(true)}
     />
@@ -212,7 +213,6 @@ function PhotoCarousel({ images, destinationName }: { images: GalleryImage[]; de
           <ArrowRight size={19} strokeWidth={1.5} />
         </button>
       </div>
-      <p className="carousel-hint">{canNavigate ? "A moment at a time. Use the arrows or swipe to explore." : "One place. One captured moment."}</p>
     </div>
   );
 }
@@ -282,9 +282,9 @@ export default function TabibitoApp({ journalData }: { journalData: JournalPageD
         <div className="header-inner">
           <a className="wordmark" href={`${APP_BASE_PATH}/`} aria-label="Tabibito home">tabibito<span className="wordmark-dot" /></a>
           <div className="travel-stats" aria-label="Travel totals">
-            <div className="stat"><span className="stat-value">{totalCountries}</span><span className="stat-label">Countries</span></div>
+            <div className="stat"><span className="stat-value"><AnimatedCount value={totalCountries} /></span><span className="stat-label">Countries</span></div>
             <span className="stat-divider" aria-hidden="true" />
-            <div className="stat"><span className="stat-value">{totalDestinations}</span><span className="stat-label">Destinations</span></div>
+            <div className="stat"><span className="stat-value"><AnimatedCount value={totalDestinations} /></span><span className="stat-label">Destinations</span></div>
           </div>
         </div>
       </header>
@@ -307,7 +307,7 @@ export default function TabibitoApp({ journalData }: { journalData: JournalPageD
         </section>
         {destination ? <DestinationJournal key={destination.key} destination={destination} /> : <div className="gallery-empty"><h2>The journey starts here</h2><p>Destinations will appear as the journal grows.</p></div>}
       </main>
-      <footer className="site-footer"><span>tabibito</span><p>Collecting moments. Keeping memories.</p><span className="footer-japanese" lang="ja">旅人</span></footer>
+      <footer className="site-footer"><span>tabibito</span><span className="footer-japanese" lang="ja">旅人</span></footer>
     </div>
   );
 }
