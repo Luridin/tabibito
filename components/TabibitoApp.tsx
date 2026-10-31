@@ -1,573 +1,314 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import Image from "next/image";
-import ImageLightbox from "@/components/ImageLightbox";
-import AnimatedCounter from "@/components/ui/AnimatedCounter";
-import {
-  APP_BASE_PATH,
-  JOURNAL_ASSETS,
-} from "@/lib/constants";
-import type {
-  Country,
-  DestinationContentResponse,
-  JournalPageData,
-} from "@/types";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { ArrowLeft, ArrowRight, ChevronDown, ImageOff, MapPin, RefreshCw } from "lucide-react";
+import { APP_BASE_PATH } from "@/lib/constants";
+import type { DestinationContentResponse, DestinationOption, GalleryImage, JournalPageData } from "@/types";
 
-const EMPTY_DESTINATION_CONTENT: DestinationContentResponse = {
-  images: [],
-  experience: "",
-  experienceFormat: "none",
-  configured: true,
-  prefix: null,
-};
+const CACHE_DURATION_MS = 60_000;
+const contentCache = new Map<string, { content: DestinationContentResponse; expires: number }>();
 
-const destinationContentCache = new Map<string, DestinationContentResponse>();
+type ContentResult = { content: DestinationContentResponse; error?: never } | { content?: never; error: string };
 
-function PixelLogoCard() {
-  const [logoFailed, setLogoFailed] = useState(false);
-  const logoSrc = `${APP_BASE_PATH}${JOURNAL_ASSETS.logoPath}`;
-
-  return (
-    <section className="pixel-card min-h-[180px]">
-      <div className="pixel-card-inner flex h-full flex-col justify-between gap-5 p-5 sm:p-6">
-        <div className="flex items-start gap-4 sm:gap-5">
-          <div className="flex min-h-[6.5rem] min-w-[6.5rem] shrink-0 items-end justify-center sm:min-h-[8rem] sm:min-w-[8rem]">
-            {!logoFailed ? (
-              <Image
-                src={logoSrc}
-                alt="Tabibito logo"
-                width={192}
-                height={192}
-                priority
-                sizes="(max-width: 640px) 120px, 160px"
-                className="h-auto max-h-[7rem] w-auto max-w-[7rem] object-contain [image-rendering:pixelated] sm:max-h-[8.5rem] sm:max-w-[8.5rem]"
-                onError={() => setLogoFailed(true)}
-              />
-            ) : (
-              <div className="flex h-[6.5rem] w-[6.5rem] items-center justify-center rounded-sm bg-[linear-gradient(180deg,rgba(255,194,92,0.95),rgba(238,154,50,0.92))] px-3 text-center text-[10px] font-black uppercase tracking-[0.18em] text-[var(--journal-ink)] sm:h-[8rem] sm:w-[8rem]">
-                Tabibito
-              </div>
-            )}
-          </div>
-
-          <div className="pt-3 sm:pt-4">
-            <h1 className="pixel-heading text-[clamp(0.9rem,1.5vw,1.2rem)] leading-[1.5] text-[var(--journal-ink)]">
-              Tabibito
-            </h1>
-            <p className="pixel-label mt-2">Travel Journal</p>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
+function getCachedContent(key: string): ContentResult | null {
+  const cached = contentCache.get(key);
+  return cached && cached.expires > Date.now() ? { content: cached.content } : null;
 }
 
-function StatTile({
-  label,
-  value,
-  isLast = false,
-}: {
-  label: string;
-  value: number;
-  isLast?: boolean;
-}) {
-  return (
-    <div
-      className={`flex flex-col items-center justify-center gap-2 px-4 py-3 text-center sm:px-6 sm:py-4 ${
-        isLast
-          ? ""
-          : "border-b-4 border-[var(--journal-line)] sm:border-b-0 sm:border-r-4"
-      }`}
-    >
-      <span className="pixel-stat-value text-3xl text-[var(--journal-ink)] sm:text-4xl md:text-5xl">
-          <AnimatedCounter value={value} />
-      </span>
-      <p className="text-sm font-medium text-[var(--journal-ink)] sm:text-base">{label}</p>
-    </div>
-  );
+function useDestinationContent(destination: DestinationOption) {
+  const [result, setResult] = useState<ContentResult | null>(() => getCachedContent(destination.key));
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    if (getCachedContent(destination.key)) return;
+
+    const controller = new AbortController();
+    let active = true;
+    const params = new URLSearchParams({
+      countryId: destination.countryId,
+      destinationId: destination.destination.id,
+    });
+
+    async function load() {
+      try {
+        const response = await fetch(`${APP_BASE_PATH}/api/gallery?${params}`, {
+          signal: controller.signal,
+          cache: "no-store",
+        });
+        if (!response.ok) throw new Error("Could not load this destination.");
+        const content = await response.json() as DestinationContentResponse;
+        if (!active) return;
+        if (content.configured) {
+          contentCache.set(destination.key, { content, expires: Date.now() + CACHE_DURATION_MS });
+        }
+        setResult({ content });
+      } catch {
+        if (active) setResult({ error: "The journal couldn’t be loaded. Please try again." });
+      }
+    }
+
+    void load();
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [destination, attempt]);
+
+  const retry = () => {
+    contentCache.delete(destination.key);
+    setResult(null);
+    setAttempt((previous) => previous + 1);
+  };
+
+  return { result, retry };
 }
 
-function StatsCard({
-  totalDestinations,
-  totalCountries,
-}: {
-  totalDestinations: number;
-  totalCountries: number;
-}) {
-  return (
-    <section className="pixel-card lg:col-span-2 min-h-[180px]">
-      <div className="pixel-card-inner flex h-full items-center p-5 sm:p-6">
-        <div className="grid w-full sm:grid-cols-2">
-          <StatTile label="Destinations" value={totalDestinations} />
-          <StatTile label="Countries" value={totalCountries} isLast />
-        </div>
-      </div>
-    </section>
-  );
-}
+// Render the supported journal blocks without injecting HTML from the bucket.
+function ExperienceText({ body, format }: { body: string; format: DestinationContentResponse["experienceFormat"] }) {
+  const lines = body.replace(/\r\n?/g, "\n").trim().split("\n");
+  const blocks: ReactNode[] = [];
+  let paragraph: string[] = [];
+  let list: string[] = [];
+  const flush = () => {
+    if (paragraph.length) {
+      blocks.push(<p key={`p-${blocks.length}`}>{paragraph.join(" ")}</p>);
+      paragraph = [];
+    }
+    if (list.length) {
+      blocks.push(<ul key={`ul-${blocks.length}`}>{list.map((item, index) => <li key={index}>{item}</li>)}</ul>);
+      list = [];
+    }
+  };
 
-function CountryArtImage({
-  artPath,
-  countryName,
-}: {
-  artPath: string;
-  countryName: string;
-}) {
-  const [artFailed, setArtFailed] = useState(false);
-
-  if (artFailed) {
-    return (
-      <div className="flex h-full w-full items-center justify-center bg-[linear-gradient(180deg,rgba(255,210,110,0.45),rgba(255,244,207,0.3))] p-6 text-center">
-        <div className="pixel-heading text-4xl text-[var(--journal-ink)] sm:text-5xl">
-          ?
-        </div>
-      </div>
-    );
+  for (const line of lines) {
+    const heading = format === "markdown" ? line.match(/^#{1,6}\s+(.+)$/) : null;
+    const item = format === "markdown" ? line.match(/^[-*+]\s+(.+)$/) : null;
+    const quote = format === "markdown" ? line.match(/^>\s?(.*)$/) : null;
+    if (!line.trim()) {
+      flush();
+    } else if (heading) {
+      flush();
+      blocks.push(<h3 key={`h-${blocks.length}`}>{heading[1]}</h3>);
+    } else if (item) {
+      if (paragraph.length) flush();
+      list.push(item[1]);
+    } else if (quote) {
+      flush();
+      blocks.push(<blockquote key={`q-${blocks.length}`}>{quote[1]}</blockquote>);
+    } else {
+      if (list.length) flush();
+      paragraph.push(line.trim());
+    }
   }
+  flush();
+  return <div className="experience-prose">{blocks}</div>;
+}
 
-  return (
+function Photo({ image }: { image: GalleryImage }) {
+  const [failed, setFailed] = useState(false);
+  return failed ? (
+    <div className="photo-unavailable"><ImageOff size={28} strokeWidth={1} /><p>This photo is unavailable.</p></div>
+  ) : (
     <Image
-      src={`${APP_BASE_PATH}${artPath}`}
-      alt={`${countryName} pixel art`}
-      width={640}
-      height={640}
-      loading="eager"
-      sizes="(max-width: 1024px) 100vw, 66vw"
-      className="max-h-[320px] w-full object-contain [image-rendering:pixelated]"
-      onError={() => setArtFailed(true)}
+      src={image.url}
+      alt={image.caption}
+      fill
+      sizes="(max-height: 500px) and (orientation: landscape) and (max-width: 1000px) 35svh, (max-width: 700px) min(86vw, 43.5svh, 400px), 420px"
+      className="gallery-photo"
+      onError={() => setFailed(true)}
     />
   );
 }
 
-function CountryArtCard({ selectedCountry }: { selectedCountry: Country | null }) {
-  const artPath = selectedCountry
-    ? JOURNAL_ASSETS.countryArtById[
-        selectedCountry.id as keyof typeof JOURNAL_ASSETS.countryArtById
-      ]
-    : null;
+function PhotoCarousel({ images, destinationName }: { images: GalleryImage[]; destinationName: string }) {
+  const [index, setIndex] = useState(0);
+  const [direction, setDirection] = useState(1);
+  const touchStart = useRef<{ x: number; y: number } | null>(null);
+  const reducedMotion = useReducedMotion();
+  const image = images[index];
+  const canNavigate = images.length > 1;
 
-  return (
-    <section className="pixel-card lg:col-span-2">
-      <div className="pixel-card-inner flex h-full min-h-[360px] flex-col gap-4 p-5 sm:p-6">
-        <div>
-          <h2 className="pixel-heading text-sm text-[var(--journal-ink)] sm:text-base">
-            Post Card
-          </h2>
-        </div>
-
-        <div className="pixel-reading-surface flex min-h-[260px] flex-1 items-center justify-center p-4 sm:p-6">
-          {selectedCountry && artPath ? (
-            <CountryArtImage
-              key={artPath}
-              artPath={artPath}
-              countryName={selectedCountry.name}
-            />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center bg-[linear-gradient(180deg,rgba(255,210,110,0.45),rgba(255,244,207,0.3))] p-6 text-center">
-              <div className="pixel-heading text-4xl text-[var(--journal-ink)] sm:text-5xl">
-                ?
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function renderExperienceBlocks(body: string, format: DestinationContentResponse["experienceFormat"]) {
-  const normalizedBody = body.replace(/\r\n/g, "\n").trim();
-  if (!normalizedBody) {
-    return null;
+  function move(step: number) {
+    if (!canNavigate) return;
+    setDirection(step);
+    setIndex((current) => (current + step + images.length) % images.length);
   }
 
-  const blocks = normalizedBody.split(/\n{2,}/).map((block) => block.trim()).filter(Boolean);
-
-  return blocks.map((block, index) => {
-    const lines = block.split("\n").map((line) => line.trim()).filter(Boolean);
-    if (lines.length === 0) {
-      return null;
-    }
-
-    const headingMatch = lines[0].match(/^(#{1,3})\s+(.*)$/);
-    if (format === "markdown" && headingMatch) {
-      return (
-        <h3
-          key={`heading-${index}`}
-          className="pixel-heading mt-2 text-xs text-[var(--journal-ink)] sm:text-sm"
-        >
-          {headingMatch[2].trim()}
-        </h3>
-      );
-    }
-
-    if (format === "markdown" && lines.every((line) => /^[-*]\s+/.test(line))) {
-      return (
-        <ul
-          key={`list-${index}`}
-          className="space-y-2 pl-5 text-sm leading-7 text-[var(--journal-ink)] sm:text-base"
-        >
-          {lines.map((line, lineIndex) => (
-            <li key={`item-${index}-${lineIndex}`}>{line.replace(/^[-*]\s+/, "")}</li>
-          ))}
-        </ul>
-      );
-    }
-
-    return (
-      <p
-        key={`paragraph-${index}`}
-        className="text-sm leading-7 text-[var(--journal-ink)] sm:text-base"
-      >
-        {lines.join(" ").replace(/^>\s?/, "")}
-      </p>
-    );
-  });
+  return (
+    <div
+      className="carousel"
+      role="region"
+      aria-roledescription="carousel"
+      aria-label={`${destinationName} photos`}
+      onKeyDown={(event) => {
+        if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+          event.preventDefault();
+          move(event.key === "ArrowLeft" ? -1 : 1);
+        }
+      }}
+    >
+      <div className="carousel-stage">
+        <div className="card-stack" data-stacked={canNavigate}>
+          <div className="card-back card-back-far" aria-hidden="true" />
+          <div className="card-back card-back-near" aria-hidden="true" />
+          <div
+            className="photo-card"
+            onTouchStart={(event) => {
+              if (event.touches.length !== 1) {
+                touchStart.current = null;
+                return;
+              }
+              touchStart.current = { x: event.touches[0].clientX, y: event.touches[0].clientY };
+            }}
+            onTouchCancel={() => { touchStart.current = null; }}
+            onTouchEnd={(event) => {
+              if (!touchStart.current || event.touches.length > 0 || !event.changedTouches.length) return;
+              const dx = event.changedTouches[0].clientX - touchStart.current.x;
+              const dy = event.changedTouches[0].clientY - touchStart.current.y;
+              if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy)) move(dx < 0 ? 1 : -1);
+              touchStart.current = null;
+            }}
+          >
+            <div className="photo-viewport">
+              <AnimatePresence initial={false} mode="wait" custom={direction}>
+                <motion.div
+                  key={image.id}
+                  custom={direction}
+                  variants={{
+                    enter: (step: number) => ({ opacity: 0, x: reducedMotion ? 0 : step * 24 }),
+                    visible: { opacity: 1, x: 0 },
+                    exit: (step: number) => ({ opacity: 0, x: reducedMotion ? 0 : step * -24 }),
+                  }}
+                  initial="enter"
+                  animate="visible"
+                  exit="exit"
+                  transition={{ duration: reducedMotion ? 0 : 0.18 }}
+                  className="photo-slide"
+                  role="group"
+                  aria-roledescription="slide"
+                  aria-label={`${index + 1} of ${images.length}`}
+                >
+                  <Photo image={image} />
+                </motion.div>
+              </AnimatePresence>
+            </div>
+            <div className="photo-card-footer" aria-live="polite" aria-atomic="true">
+              <span className="photo-caption">{image.caption}</span>
+              <span className="photo-number">{String(index + 1).padStart(2, "0")}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="carousel-controls">
+        <button type="button" className="arrow-button" onClick={() => move(-1)} disabled={!canNavigate} aria-label="Previous photo">
+          <ArrowLeft size={19} strokeWidth={1.5} />
+        </button>
+        <span className="carousel-position" aria-live="polite" aria-atomic="true">
+          <span>{String(index + 1).padStart(2, "0")}</span><span className="position-divider" />{String(images.length).padStart(2, "0")}
+        </span>
+        <button type="button" className="arrow-button" onClick={() => move(1)} disabled={!canNavigate} aria-label="Next photo">
+          <ArrowRight size={19} strokeWidth={1.5} />
+        </button>
+      </div>
+      <p className="carousel-hint">{canNavigate ? "A moment at a time. Use the arrows or swipe to explore." : "One place. One captured moment."}</p>
+    </div>
+  );
 }
 
-export default function TabibitoApp({
-  journalData,
-}: {
-  journalData: JournalPageData;
-}) {
-  const [selectedCountryId, setSelectedCountryId] = useState<string | null>(null);
-  const [selectedDestinationKey, setSelectedDestinationKey] = useState<string | null>(null);
-  const [destinationContent, setDestinationContent] = useState<DestinationContentResponse>(
-    EMPTY_DESTINATION_CONTENT
-  );
-  const [isDestinationLoading, setIsDestinationLoading] = useState(false);
-  const [destinationError, setDestinationError] = useState<string | null>(null);
-  const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(null);
-
-  const { countries, destinationsByCountry, totalCountries, totalDestinations } = journalData;
-
-  const selectedCountry = useMemo(() => {
-    if (countries.length === 0) {
-      return null;
-    }
-
-    return (
-      countries.find((country) => country.id === selectedCountryId) ??
-      countries[0]
-    );
-  }, [countries, selectedCountryId]);
-
-  const availableDestinations = useMemo(() => {
-    return selectedCountry ? (destinationsByCountry[selectedCountry.id] ?? []) : [];
-  }, [selectedCountry, destinationsByCountry]);
-
-  const selectedDestination = useMemo(() => {
-    if (availableDestinations.length === 0) {
-      return null;
-    }
-
-    return (
-      availableDestinations.find((destination) => destination.key === selectedDestinationKey) ??
-      availableDestinations[0]
-    );
-  }, [availableDestinations, selectedDestinationKey]);
-
-  const cachedDestinationContent = useMemo(() => {
-    if (!selectedDestination) {
-      return null;
-    }
-
-    return destinationContentCache.get(selectedDestination.key) ?? null;
-  }, [selectedDestination]);
-
-  useEffect(() => {
-    if (!selectedDestination || cachedDestinationContent) {
-      return;
-    }
-
-    const controller = new AbortController();
-    let frameId = 0;
-    const params = new URLSearchParams({
-      countryId: selectedDestination.countryId,
-      destinationId: selectedDestination.destination.id,
-    });
-
-    frameId = requestAnimationFrame(() => {
-      setDestinationContent(EMPTY_DESTINATION_CONTENT);
-      setDestinationError(null);
-      setIsDestinationLoading(true);
-    });
-
-    fetch(`${APP_BASE_PATH}/api/gallery?${params.toString()}`, {
-      signal: controller.signal,
-    })
-      .then(async (response) => {
-        if (!response.ok) {
-          throw new Error(`Destination request failed with status ${response.status}`);
-        }
-        return response.json() as Promise<DestinationContentResponse>;
-      })
-      .then((payload) => {
-        destinationContentCache.set(selectedDestination.key, payload);
-        setDestinationContent(payload);
-      })
-      .catch((error: unknown) => {
-        if (error instanceof Error && error.name === "AbortError") {
-          return;
-        }
-
-        setDestinationError("Could not load destination media right now.");
-        setDestinationContent(EMPTY_DESTINATION_CONTENT);
-      })
-      .finally(() => {
-        setIsDestinationLoading(false);
-      });
-
-    return () => {
-      controller.abort();
-      cancelAnimationFrame(frameId);
-    };
-  }, [cachedDestinationContent, selectedDestination]);
-
-  const activeDestinationContent = selectedDestination
-    ? (cachedDestinationContent ?? destinationContent)
-    : EMPTY_DESTINATION_CONTENT;
-  const activeDestinationError = cachedDestinationContent
-    ? null
-    : selectedDestination
-      ? destinationError
-      : null;
-  const activeDestinationLoading = cachedDestinationContent
-    ? false
-    : selectedDestination
-      ? isDestinationLoading
-      : false;
-  const galleryImages = activeDestinationContent.images;
-
-  const handlePrevImage = useCallback(() => {
-    setSelectedImageIndex((previous) => {
-      if (previous === null || galleryImages.length === 0) {
-        return previous;
-      }
-
-      return (previous - 1 + galleryImages.length) % galleryImages.length;
-    });
-  }, [galleryImages.length]);
-
-  const handleNextImage = useCallback(() => {
-    setSelectedImageIndex((previous) => {
-      if (previous === null || galleryImages.length === 0) {
-        return previous;
-      }
-
-      return (previous + 1) % galleryImages.length;
-    });
-  }, [galleryImages.length]);
-
-  const renderedExperience = renderExperienceBlocks(
-    activeDestinationContent.experience.trim(),
-    activeDestinationContent.experienceFormat
-  );
+function DestinationJournal({ destination }: { destination: DestinationOption }) {
+  const { result, retry } = useDestinationContent(destination);
+  const content = result?.content;
+  const loading = result === null;
+  const unavailable = content?.configured === false;
+  const images = content?.images ?? [];
 
   return (
-    <main className="journal-shell">
-      <div className="journal-grid pb-8">
-        <PixelLogoCard />
+    <>
+      <section className="gallery-section" aria-labelledby="gallery-heading" aria-busy={loading}>
+        <div className="section-heading">
+          <div><p className="eyebrow">The photo journal</p><h2 id="gallery-heading">{destination.destination.name}</h2></div>
+          <span className="location-tag"><MapPin size={13} aria-hidden="true" />{destination.countryName}</span>
+        </div>
+        {loading ? (
+          <div className="gallery-loading" role="status"><div className="skeleton-card" /><p>Finding the moments…</p></div>
+        ) : result.error || unavailable ? (
+          <div className="gallery-empty" role="status">
+            <ImageOff size={30} strokeWidth={1} aria-hidden="true" />
+            <h3>{unavailable ? "The photo journal is taking a pause" : "A little detour"}</h3>
+            <p>{result.error ?? "Photos and stories are temporarily unavailable. Please check back soon."}</p>
+            <button type="button" className="retry-button" onClick={retry}><RefreshCw size={14} />Try again</button>
+          </div>
+        ) : images.length ? (
+          <PhotoCarousel images={images} destinationName={destination.destination.name} />
+        ) : (
+          <div className="gallery-empty"><ImageOff size={30} strokeWidth={1} aria-hidden="true" /><h3>Memories still to be framed</h3><p>Photos from {destination.destination.name} will find their way here soon.</p></div>
+        )}
+      </section>
+      <section className="experience-section" aria-labelledby="experience-heading" aria-busy={loading}>
+        <details className="experience-disclosure">
+          <summary className="experience-toggle">
+            <div className="experience-heading"><p className="eyebrow">Beyond the photographs</p><h2 id="experience-heading">Personal experience<span className="heading-period">.</span></h2></div>
+            <ChevronDown className="experience-chevron" size={22} aria-hidden="true" />
+          </summary>
+          <div className="experience-body">
+        {loading ? (
+          <div className="experience-loading" role="status"><span className="sr-only">Loading personal experience</span><div /><div /><div /></div>
+        ) : result.error || unavailable ? (
+          <p className="experience-empty">The story couldn’t be loaded right now. Try loading the journal again above.</p>
+        ) : content?.experience.trim() ? (
+          <ExperienceText body={content.experience} format={content.experienceFormat} />
+        ) : (
+          <p className="experience-empty">Some journeys take a little longer to put into words. The story of {destination.destination.name} is still being written.</p>
+        )}
+          </div>
+        </details>
+      </section>
+    </>
+  );
+}
 
-        <StatsCard
-          totalDestinations={totalDestinations}
-          totalCountries={totalCountries}
-        />
+export default function TabibitoApp({ journalData }: { journalData: JournalPageData }) {
+  const { countries, destinationsByCountry, totalCountries, totalDestinations } = journalData;
+  const [countryId, setCountryId] = useState(countries[0]?.id ?? "");
+  const [destinationKey, setDestinationKey] = useState("");
+  const destinations = destinationsByCountry[countryId] ?? [];
+  const destination = destinations.find((option) => option.key === destinationKey) ?? destinations[0];
 
-        <section className="pixel-card">
-          <div className="pixel-card-inner flex h-full flex-col gap-5 p-5 sm:p-6">
-            <div>
-              <h2 className="pixel-heading text-sm text-[var(--journal-ink)] sm:text-base">
-                Choose your route
-              </h2>
+  return (
+    <div className="journal">
+      <header className="site-header">
+        <div className="header-inner">
+          <a className="wordmark" href={`${APP_BASE_PATH}/`} aria-label="Tabibito home">tabibito<span className="wordmark-dot" /></a>
+          <div className="travel-stats" aria-label="Travel totals">
+            <div className="stat"><span className="stat-value">{totalCountries}</span><span className="stat-label">Countries</span></div>
+            <span className="stat-divider" aria-hidden="true" />
+            <div className="stat"><span className="stat-value">{totalDestinations}</span><span className="stat-label">Destinations</span></div>
+          </div>
+        </div>
+      </header>
+      <main className="journal-main">
+        <section className="route-section" aria-labelledby="route-heading">
+          <div className="route-intro"><p className="eyebrow">A personal travel journal</p><h1 id="route-heading">Places become memories.</h1><p className="intro-copy">A collection of moments, one destination at a time.</p></div>
+          <div className="route-filters">
+            <div className="filter-field">
+              <label htmlFor="country-selector">Country</label>
+              <div className="select-wrapper"><select id="country-selector" value={countryId} disabled={!countries.length} onChange={(event) => { setCountryId(event.target.value); setDestinationKey(""); }}>
+                {countries.map((country) => <option key={country.id} value={country.id}>{country.flag}　{country.name}</option>)}
+              </select><ChevronDown size={16} aria-hidden="true" /></div>
             </div>
-
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <label className="pixel-label block" htmlFor="country-selector">
-                  Country
-                </label>
-                <select
-                  id="country-selector"
-                  className="pixel-select"
-                  value={selectedCountry?.id ?? ""}
-                  onChange={(event) => {
-                    setSelectedCountryId(event.target.value || null);
-                    setSelectedDestinationKey(null);
-                    setSelectedImageIndex(null);
-                  }}
-                >
-                  {countries.map((country) => (
-                    <option key={country.id} value={country.id}>
-                      {country.flag} {country.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="space-y-2">
-                <label className="pixel-label block" htmlFor="destination-selector">
-                  Destination
-                </label>
-                <select
-                  id="destination-selector"
-                  className="pixel-select"
-                  value={selectedDestination?.key ?? ""}
-                  onChange={(event) => {
-                    setSelectedDestinationKey(event.target.value || null);
-                    setSelectedImageIndex(null);
-                  }}
-                  disabled={availableDestinations.length === 0}
-                >
-                  {availableDestinations.map((destination) => (
-                    <option key={destination.key} value={destination.key}>
-                      {destination.destination.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+            <div className="filter-field">
+              <label htmlFor="destination-selector">Destination<span>{destinations.length} places</span></label>
+              <div className="select-wrapper"><select id="destination-selector" value={destination?.key ?? ""} disabled={!destinations.length} onChange={(event) => setDestinationKey(event.target.value)}>
+                {destinations.map((option) => <option key={option.key} value={option.key}>{option.destination.name}</option>)}
+              </select><ChevronDown size={16} aria-hidden="true" /></div>
             </div>
           </div>
         </section>
-
-        <CountryArtCard key={selectedCountry?.id ?? "none"} selectedCountry={selectedCountry} />
-
-        <section className="pixel-card lg:col-span-3">
-          <div className="pixel-card-inner flex h-full min-h-[420px] flex-col gap-5 p-5 sm:p-6">
-            <div>
-              <p className="pixel-label mb-2">Travel Experience</p>
-              <h2 className="pixel-heading text-sm text-[var(--journal-ink)] sm:text-base">
-                {selectedDestination
-                    ? `${selectedDestination.destination.name} journal entry`
-                  : "Destination journal"}
-              </h2>
-            </div>
-
-            <div className="pixel-reading-surface pixel-scroll flex-1 overflow-y-auto p-4 sm:p-5">
-              {selectedDestination ? (
-                <div className="space-y-5">
-                  <div className="space-y-3 border-b-4 border-dashed border-[var(--journal-line)] pb-4">
-                    <p className="pixel-label">Destination overview</p>
-                    <h3 className="pixel-heading text-xs text-[var(--journal-ink)] sm:text-sm">
-                      {selectedDestination.destination.name}
-                    </h3>
-                    <p className="text-sm leading-7 text-[var(--journal-ink)] sm:text-base">
-                      {selectedDestination.destination.description}
-                    </p>
-                  </div>
-
-                  {activeDestinationLoading ? (
-                    <div className="space-y-3">
-                      <div className="h-4 w-5/6 animate-pulse bg-[rgba(255,212,107,0.35)]" />
-                      <div className="h-4 w-full animate-pulse bg-[rgba(255,212,107,0.35)]" />
-                      <div className="h-4 w-11/12 animate-pulse bg-[rgba(255,212,107,0.35)]" />
-                    </div>
-                  ) : renderedExperience ? (
-                    <div className="space-y-4">{renderedExperience}</div>
-                  ) : (
-                    <div className="space-y-3">
-                      <p className="pixel-heading text-xs text-[var(--journal-ink)] sm:text-sm">
-                        Journal entry not uploaded yet
-                      </p>
-                      {activeDestinationContent.prefix ? (
-                        <p className="text-xs leading-6 text-[var(--journal-muted)]">
-                          Looked in: {activeDestinationContent.prefix}
-                        </p>
-                      ) : null}
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="flex h-full items-center justify-center text-center">
-                  <div className="max-w-xs space-y-3">
-                    <p className="pixel-heading text-xs text-[var(--journal-ink)] sm:text-sm">
-                      No destination selected
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </section>
-
-        <section className="pixel-card lg:col-span-3">
-          <div className="pixel-card-inner flex h-full min-h-[420px] flex-col gap-5 p-5 sm:p-6">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="pixel-label mb-2">Gallery</p>
-                <h2 className="pixel-heading text-sm text-[var(--journal-ink)] sm:text-base">
-                  {selectedDestination
-                    ? `${selectedDestination.destination.name} snapshots`
-                    : "Destination snapshots"}
-                </h2>
-              </div>
-              {selectedDestination ? (
-                <div className="pixel-label border-2 border-[var(--journal-line)] bg-[var(--journal-paper-strong)] px-3 py-2">
-                  {galleryImages.length} photos
-                </div>
-              ) : null}
-            </div>
-
-            {activeDestinationLoading ? (
-              <div className="grid flex-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                {Array.from({ length: 6 }).map((_, index) => (
-                  <div
-                    key={`gallery-loading-${index}`}
-                    className="pixel-image-frame aspect-[4/3] animate-pulse bg-[rgba(255,212,107,0.35)]"
-                  />
-                ))}
-              </div>
-            ) : galleryImages.length > 0 ? (
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                {galleryImages.map((image, index) => (
-                  <button
-                    key={image.id}
-                    type="button"
-                    onClick={() => setSelectedImageIndex(index)}
-                    className="pixel-image-frame group relative aspect-[4/3] overflow-hidden text-left transition-transform duration-150 hover:-translate-y-1"
-                  >
-                    <Image
-                      src={image.url}
-                      alt={image.caption}
-                      fill
-                      sizes="(max-width: 640px) 100vw, (max-width: 1280px) 50vw, 33vw"
-                      className="object-cover transition duration-200 group-hover:scale-[1.03]"
-                    />
-                    <div className="absolute inset-x-0 bottom-0 bg-[linear-gradient(180deg,transparent,rgba(43,25,5,0.9))] p-3">
-                      <p className="pixel-label !text-[9px] text-white">Photo {index + 1}</p>
-                      <p className="mt-2 line-clamp-2 text-sm leading-5 text-white">
-                        {image.caption}
-                      </p>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <div className="pixel-reading-surface flex flex-1 items-center justify-center p-6 text-center">
-                <div className="max-w-md space-y-3">
-                  <p className="pixel-heading text-xs text-[var(--journal-ink)] sm:text-sm">
-                    Gallery not loaded
-                  </p>
-                  {activeDestinationError ? (
-                    <p className="text-sm leading-6 text-[var(--journal-muted)]">
-                      {activeDestinationError}
-                    </p>
-                  ) : null}
-                </div>
-              </div>
-            )}
-          </div>
-        </section>
-      </div>
-
-      <ImageLightbox
-        selectedImageIndex={selectedImageIndex}
-        onClose={() => setSelectedImageIndex(null)}
-        onPrevImage={handlePrevImage}
-        onNextImage={handleNextImage}
-        galleryImages={galleryImages}
-      />
-    </main>
+        {destination ? <DestinationJournal key={destination.key} destination={destination} /> : <div className="gallery-empty"><h2>The journey starts here</h2><p>Destinations will appear as the journal grows.</p></div>}
+      </main>
+      <footer className="site-footer"><span>tabibito</span><p>Collecting moments. Keeping memories.</p><span className="footer-japanese" lang="ja">旅人</span></footer>
+    </div>
   );
 }

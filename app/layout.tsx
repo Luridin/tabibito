@@ -1,17 +1,12 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Press_Start_2P } from "next/font/google";
+import localFont from "next/font/local";
 import { SITE_META } from "@/lib/constants";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const pressStart = Press_Start_2P({
-  variable: "--font-press-start",
-  weight: "400",
-  subsets: ["latin"],
+const nukuNuku = localFont({
+  src: "../public/fonts/nuku1.ttf",
+  variable: "--font-nuku-nuku",
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -20,9 +15,12 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
+  themeColor: "#080808",
+  colorScheme: "dark",
   width: "device-width",
   initialScale: 1,
   maximumScale: 5,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
@@ -32,7 +30,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${geistSans.variable} ${pressStart.variable} antialiased`}>
+      <body className={nukuNuku.variable}>
         {children}
       </body>
     </html>
