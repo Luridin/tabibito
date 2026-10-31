@@ -228,7 +228,7 @@ function DestinationJournal({ destination }: { destination: DestinationOption })
     <>
       <section className="gallery-section" aria-labelledby="gallery-heading" aria-busy={loading}>
         <div className="section-heading">
-          <div><p className="eyebrow">The photo journal</p><h2 id="gallery-heading">{destination.destination.name}</h2></div>
+          <div><h1 id="gallery-heading">{destination.destination.name}</h1></div>
           <span className="location-tag"><MapPin size={13} aria-hidden="true" />{destination.countryName}</span>
         </div>
         {loading ? (
@@ -236,7 +236,7 @@ function DestinationJournal({ destination }: { destination: DestinationOption })
         ) : result.error || unavailable ? (
           <div className="gallery-empty" role="status">
             <ImageOff size={30} strokeWidth={1} aria-hidden="true" />
-            <h3>{unavailable ? "The photo journal is taking a pause" : "A little detour"}</h3>
+            <h3>{unavailable ? "Photos are temporarily unavailable" : "A little detour"}</h3>
             <p>{result.error ?? "Photos and stories are temporarily unavailable. Please check back soon."}</p>
             <button type="button" className="retry-button" onClick={retry}><RefreshCw size={14} />Try again</button>
           </div>
@@ -249,7 +249,7 @@ function DestinationJournal({ destination }: { destination: DestinationOption })
       <section className="experience-section" aria-labelledby="experience-heading" aria-busy={loading}>
         <details className="experience-disclosure">
           <summary className="experience-toggle">
-            <div className="experience-heading"><p className="eyebrow">Beyond the photographs</p><h2 id="experience-heading">Personal experience<span className="heading-period">.</span></h2></div>
+            <div className="experience-heading"><h2 id="experience-heading">Personal experience<span className="heading-period">.</span></h2></div>
             <ChevronDown className="experience-chevron" size={22} aria-hidden="true" />
           </summary>
           <div className="experience-body">
@@ -289,8 +289,7 @@ export default function TabibitoApp({ journalData }: { journalData: JournalPageD
         </div>
       </header>
       <main className="journal-main">
-        <section className="route-section" aria-labelledby="route-heading">
-          <div className="route-intro"><p className="eyebrow">A personal travel journal</p><h1 id="route-heading">Places become memories.</h1><p className="intro-copy">A collection of moments, one destination at a time.</p></div>
+        <section className="route-section" aria-label="Choose a destination">
           <div className="route-filters">
             <div className="filter-field">
               <label htmlFor="country-selector">Country</label>
