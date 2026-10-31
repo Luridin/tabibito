@@ -82,22 +82,22 @@ select option { background: #151515; color: var(--text); }
 .skeleton-card { width: min(100%, 560px); aspect-ratio: 3 / 4; border: 1px solid #272727; border-radius: 12px; background: linear-gradient(110deg,#101010 25%,#1b1b1b 45%,#101010 65%); background-size: 220% 100%; animation: shimmer 1.8s ease-in-out infinite; }
 .gallery-loading p { font-size: 12px; color: var(--muted); }
 .experience-section { margin-top: 57px; padding: 40px 0 64px; border-top: 1px solid var(--border); }
-.experience-toggle { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 48px; cursor: pointer; list-style: none; touch-action: manipulation; }
+.experience-toggle { position: relative; display: flex; align-items: center; justify-content: center; padding-inline: 32px; min-height: 48px; cursor: pointer; list-style: none; text-align: center; touch-action: manipulation; }
 .experience-toggle::-webkit-details-marker { display: none; }
 .experience-toggle:focus-visible { outline: 2px solid #e4e4e0; outline-offset: 6px; border-radius: 3px; }
-.experience-chevron { flex-shrink: 0; color: var(--muted); transition: transform 180ms ease; }
+.experience-chevron { position: absolute; right: 0; color: var(--muted); transition: transform 180ms ease; }
 .experience-disclosure[open] .experience-chevron { transform: rotate(180deg); }
-.experience-body { margin-top: 28px; }
+.experience-body { max-width: 670px; margin: 28px auto 0; text-align: justify; text-align-last: left; }
 .experience-heading h2 { margin: 0; font-weight: 400; font-size: clamp(25px,4vw,32px); letter-spacing: -1px; line-height: 1.3; }
 .heading-period { color: #88887d; }
 .experience-prose { max-width: 670px; color: #bdbdb6; font-size: 15px; line-height: 1.95; overflow-wrap: anywhere; }
 .experience-prose p { margin: 0 0 22px; }
 .experience-prose h3 { margin: 32px 0 14px; color: var(--text); font-size: 19px; font-weight: 500; line-height: 1.5; }
 .experience-prose h3:first-child { margin-top: 0; }
-.experience-prose ul { list-style: disc; margin: 0 0 22px; padding-left: 22px; }
+.experience-prose ul { list-style: disc outside; margin: 0 0 22px; padding-left: 22px; text-align: left; }
 .experience-prose li { padding-left: 4px; margin-bottom: 6px; }
 .experience-prose blockquote { border-left: 2px solid #626259; padding: 4px 0 4px 22px; margin: 24px 0; color: #d9d9d2; font-style: italic; }
-.experience-empty { color: var(--muted); max-width: 560px; font-size: 14px; line-height: 1.9; margin: 0; }
+.experience-empty { color: var(--muted); max-width: 560px; font-size: 14px; line-height: 1.9; margin: 0 auto; }
 .experience-loading { display: grid; gap: 14px; }
 .experience-loading div { height: 12px; border-radius: 3px; background: #1a1a1a; animation: breathe 1.8s ease-in-out infinite; }
 .experience-loading div:nth-child(2) { width: 95%; }
