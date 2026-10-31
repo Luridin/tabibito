@@ -207,7 +207,7 @@ function PhotoCarousel({ images, destinationName }: { images: GalleryImage[]; de
           <ArrowLeft size={19} strokeWidth={1.5} />
         </button>
         <span className="carousel-position" aria-live="polite" aria-atomic="true">
-          <span>{String(index + 1).padStart(2, "0")}</span><span className="position-divider" />{String(images.length).padStart(2, "0")}
+          <span>{index + 1}</span><span aria-hidden="true">/</span><span className="sr-only"> of </span><span>{images.length}</span>
         </span>
         <button type="button" className="arrow-button" onClick={() => move(1)} disabled={!canNavigate} aria-label="Next photo">
           <ArrowRight size={19} strokeWidth={1.5} />

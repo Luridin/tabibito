@@ -70,9 +70,8 @@ select option { background: #151515; color: var(--text); }
 }
 .arrow-button:active:not(:disabled) { background: #333; }
 .arrow-button:disabled { opacity: 0.3; }
-.carousel-position { display: flex; align-items: center; gap: 12px; color: #858581; font-size: 11px; font-variant-numeric: tabular-nums; }
+.carousel-position { display: flex; align-items: center; gap: 2px; color: #858581; font-size: 11px; font-variant-numeric: tabular-nums; }
 .carousel-position > span:first-child { color: #eee; }
-.position-divider { height: 1px; width: 23px; background: #494943; }
 .gallery-empty { min-height: 440px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 14px; margin-top: 32px; padding: 40px 24px; border: 1px solid #242424; border-radius: 12px; background: #0d0d0d; }
 .gallery-empty > svg { color: #74746e; margin-bottom: 8px; }
 .gallery-empty h2, .gallery-empty h3 { font-size: 20px; font-weight: 400; letter-spacing: -0.5px; margin: 0; }
