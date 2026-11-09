@@ -24,7 +24,7 @@ if not sheets:
     raise ValueError('The spreadsheet has no sheets.')
 sheet = next((s for s in sheets if s.get('{'+ns['t']+'}name') == 'Sheet1'), sheets[0])
 rows = []
-for row in sheet.findall('t:table-row', ns):
+for row in sheet.findall('.//t:table-row', ns):
     cells = []
     for cell in row:
         if cell.tag not in ('{'+ns['t']+'}table-cell', '{'+ns['t']+'}covered-table-cell'):

@@ -304,9 +304,11 @@ function DestinationJournal({ destination }: { destination: DestinationOption })
 export default function TabibitoApp({ journalData, initialSelection }: { journalData: JournalPageData; initialSelection: JournalSelection }) {
   const { countries, destinationsByCountry, totalCountries, totalDestinations } = journalData;
   const [selection, setSelection] = useState(initialSelection);
+  const [selectionReady, setSelectionReady] = useState(false);
   const { countryId, destinationKey, sort: destinationSort } = selection;
 
   useEffect(() => {
+    let restoreFrame = 0;
     const restoreSelection = () => {
       const params = new URLSearchParams(window.location.search);
       setSelection(resolveJournalSelection(journalData, {
@@ -314,9 +316,23 @@ export default function TabibitoApp({ journalData, initialSelection }: { journal
         destination: params.get("destination") ?? undefined,
         sort: params.get("sort") ?? undefined,
       }));
+      setSelectionReady(true);
     };
-    window.addEventListener("popstate", restoreSelection);
-    return () => window.removeEventListener("popstate", restoreSelection);
+    // Browsers can restore native select values after popstate or hydration.
+    // Reconcile on the next frame so the controls, heading, and gallery all
+    // reflect the URL after that restoration has finished.
+    const scheduleRestore = () => {
+      cancelAnimationFrame(restoreFrame);
+      restoreFrame = requestAnimationFrame(restoreSelection);
+    };
+    scheduleRestore();
+    window.addEventListener("popstate", scheduleRestore);
+    window.addEventListener("pageshow", scheduleRestore);
+    return () => {
+      cancelAnimationFrame(restoreFrame);
+      window.removeEventListener("popstate", scheduleRestore);
+      window.removeEventListener("pageshow", scheduleRestore);
+    };
   }, [journalData]);
 
   function changeSelection(next: JournalSelection) {
@@ -354,20 +370,20 @@ export default function TabibitoApp({ journalData, initialSelection }: { journal
           <div className="route-filters">
             <div className="filter-field">
               <label htmlFor="country-selector">Country</label>
-              <div className="select-wrapper"><select id="country-selector" value={countryId} disabled={!countries.length} onChange={(event) => changeSelection(resolveJournalSelection(journalData, { country: event.target.value, sort: destinationSort }))}>
+              <div className="select-wrapper"><select id="country-selector" autoComplete="off" value={countryId} disabled={!selectionReady || !countries.length} onChange={(event) => changeSelection(resolveJournalSelection(journalData, { country: event.target.value, sort: destinationSort }))}>
                 {countries.map((country) => <option key={country.id} value={country.id}>{country.flag}　{country.name}</option>)}
               </select><ChevronDown size={16} aria-hidden="true" /></div>
             </div>
             <div className="filter-field">
               <label htmlFor="destination-selector">Destination<span>{destinations.length} places</span></label>
-              <div className="select-wrapper"><select id="destination-selector" value={destination?.key ?? ""} disabled={!destinations.length} onChange={(event) => changeSelection({ ...selection, destinationKey: event.target.value })}>
+              <div className="select-wrapper"><select id="destination-selector" autoComplete="off" value={destination?.key ?? ""} disabled={!selectionReady || !destinations.length} onChange={(event) => changeSelection({ ...selection, destinationKey: event.target.value })}>
                 {sortedDestinations.map((option) => <option key={option.key} value={option.key}>{option.destination.name}</option>)}
               </select><ChevronDown size={16} aria-hidden="true" /></div>
             </div>
             <div className="filter-field sort-field">
               <label htmlFor="destination-sort">Sort by</label>
               <div className="select-wrapper">
-                <select id="destination-sort" value={destinationSort} onChange={(event) => changeSelection({ ...selection, sort: event.target.value === "alphabetical" ? "alphabetical" : "date" })}>
+                <select id="destination-sort" autoComplete="off" value={destinationSort} disabled={!selectionReady} onChange={(event) => changeSelection({ ...selection, sort: event.target.value === "alphabetical" ? "alphabetical" : "date" })}>
                   <option value="date">Date</option>
                   <option value="alphabetical">Alphabetical</option>
                 </select>
