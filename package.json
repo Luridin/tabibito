@@ -6,7 +6,9 @@
     "dev": "next dev --webpack",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "node --test tests/*.test.mjs",
+    "import:travel": "node scripts/import-travel-ods.mjs \"data/Travel List.ods\" data/locations.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1019.0",

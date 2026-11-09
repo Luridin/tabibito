@@ -34,13 +34,13 @@ export const TRAVEL_DATA: TravelData = {
                 "travelOrder": 1,
                 "photoFolder": "India/Bengaluru"
             },
-            "subramanya": {
-                "id": "subramanya",
-                "name": "Subramanya",
-                "description": "Visited Subramanya in India.",
-                "photoFolder": "India/Subramanya",
-                "visited": true,
-                "travelOrder": 2
+            "kukke-subramanya": {
+                "id": "kukke-subramanya",
+                "name": "Kukke Subramanya",
+                "description": "Visited Kukke Subramanya in India.",
+                "travelOrder": 2,
+                "photoFolder": "India/Kukke Subramanya",
+                "visited": true
             },
             "gokarna": {
                 "id": "gokarna",
@@ -738,13 +738,13 @@ export const TRAVEL_DATA: TravelData = {
                 "visited": true,
                 "travelOrder": 92
             },
-            "bhubaneswar": {
-                "id": "bhubaneswar",
-                "name": "Bhubaneswar",
-                "description": "Visited Bhubaneswar in India.",
-                "photoFolder": "India/Bhubaneswar",
-                "visited": true,
-                "travelOrder": 93
+            "bhubaneshwar": {
+                "id": "bhubaneshwar",
+                "name": "Bhubaneshwar",
+                "description": "Visited Bhubaneshwar in India.",
+                "travelOrder": 93,
+                "photoFolder": "India/Bhubaneshwar",
+                "visited": true
             },
             "konark": {
                 "id": "konark",
@@ -826,13 +826,13 @@ export const TRAVEL_DATA: TravelData = {
                 "travelOrder": 106,
                 "photoFolder": "India/Shivamogga"
             },
-            "bhadravati": {
-                "id": "bhadravati",
-                "name": "Bhadravati",
-                "description": "Visited Bhadravati in Karnataka, India.",
-                "visited": true,
+            "bhadravathi": {
+                "id": "bhadravathi",
+                "name": "Bhadravathi",
+                "description": "Visited Bhadravathi in India.",
                 "travelOrder": 107,
-                "photoFolder": "India/Bhadravati"
+                "photoFolder": "India/Bhadravathi",
+                "visited": true
             },
             "yuksum": {
                 "id": "yuksum",

@@ -1,15 +1,17 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import Image from "next/image";
+import Image, { getImageProps } from "next/image";
 import AnimatedCount from "@/components/AnimatedCount";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { ArrowLeft, ArrowRight, ChevronDown, ImageOff, MapPin, RefreshCw } from "lucide-react";
 import { APP_BASE_PATH } from "@/lib/constants";
-import type { DestinationContentResponse, DestinationOption, GalleryImage, JournalPageData } from "@/types";
+import { resolveJournalSelection } from "@/lib/selection";
+import type { DestinationContentResponse, DestinationOption, GalleryImage, JournalPageData, JournalSelection } from "@/types";
 
 const CACHE_DURATION_MS = 60_000;
 const contentCache = new Map<string, { content: DestinationContentResponse; expires: number }>();
+const GALLERY_IMAGE_SIZES = "(max-height: 500px) and (orientation: landscape) and (max-width: 1000px) min(65svh, 320px), (max-width: 700px) min(94vw, 51svh, 480px), 560px";
 
 type ContentResult = { content: DestinationContentResponse; error?: never } | { content?: never; error: string };
 
@@ -41,7 +43,7 @@ function useDestinationContent(destination: DestinationOption) {
         if (!response.ok) throw new Error("Could not load this destination.");
         const content = await response.json() as DestinationContentResponse;
         if (!active) return;
-        if (content.configured) {
+        if (content.configured && !content.warnings?.length) {
           contentCache.set(destination.key, { content, expires: Date.now() + CACHE_DURATION_MS });
         }
         setResult({ content });
@@ -107,19 +109,27 @@ function ExperienceText({ body, format }: { body: string; format: DestinationCon
   return <div className="experience-prose">{blocks}</div>;
 }
 
-function Photo({ image }: { image: GalleryImage }) {
-  const [failed, setFailed] = useState(false);
-  return failed ? (
+function Photo({ image, first }: { image: GalleryImage; first: boolean }) {
+  const [failedSource, setFailedSource] = useState<string | null>(null);
+  const [loadedSource, setLoadedSource] = useState<string | null>(null);
+  return failedSource === image.url ? (
     <div className="photo-unavailable"><ImageOff size={28} strokeWidth={1} /><p>This photo is unavailable.</p></div>
   ) : (
+    <>
+    {loadedSource !== image.url && <div className="photo-loading" role="status"><span className="sr-only">Loading photo</span></div>}
     <Image
       src={image.url}
       alt={image.caption}
       fill
-      sizes="(max-height: 500px) and (orientation: landscape) and (max-width: 1000px) 35svh, (max-width: 700px) min(94vw, 51svh, 480px), 560px"
+      sizes={GALLERY_IMAGE_SIZES}
+      loading="eager"
+      fetchPriority={first ? "high" : "auto"}
       className="gallery-photo"
-      onError={() => setFailed(true)}
+      draggable={false}
+      onLoad={() => setLoadedSource(image.url)}
+      onError={() => setFailedSource(image.url)}
     />
+    </>
   );
 }
 
@@ -130,6 +140,25 @@ function PhotoCarousel({ images, destinationName }: { images: GalleryImage[]; de
   const reducedMotion = useReducedMotion();
   const image = images[index];
   const canNavigate = images.length > 1;
+
+  useEffect(() => {
+    if (images.length < 2) return;
+    const connection = (navigator as Navigator & {
+      connection?: { saveData?: boolean; effectiveType?: string };
+    }).connection;
+    if (connection?.saveData || /(^|-)2g$/.test(connection?.effectiveType ?? "")) return;
+
+    const neighbors = new Set([(index + 1) % images.length, (index - 1 + images.length) % images.length]);
+    for (const position of neighbors) {
+      const neighbor = images[position];
+      const { props } = getImageProps({ src: neighbor.url, alt: neighbor.caption, fill: true, sizes: GALLERY_IMAGE_SIZES });
+      const preload = new window.Image();
+      preload.decoding = "async";
+      if (props.sizes) preload.sizes = props.sizes;
+      if (props.srcSet) preload.srcset = props.srcSet;
+      preload.src = props.src;
+    }
+  }, [images, index]);
 
   function move(step: number) {
     if (!canNavigate) return;
@@ -191,7 +220,7 @@ function PhotoCarousel({ images, destinationName }: { images: GalleryImage[]; de
                   aria-roledescription="slide"
                   aria-label={`${index + 1} of ${images.length}`}
                 >
-                  <Photo image={image} />
+                  <Photo image={image} first={index === 0} />
                 </motion.div>
               </AnimatePresence>
             </div>
@@ -255,8 +284,11 @@ function DestinationJournal({ destination }: { destination: DestinationOption })
           <div className="experience-body">
         {loading ? (
           <div className="experience-loading" role="status"><span className="sr-only">Loading personal experience</span><div /><div /><div /></div>
-        ) : result.error || unavailable ? (
-          <p className="experience-empty">The story couldn’t be loaded right now. Try loading the journal again above.</p>
+        ) : result.error || unavailable || content?.warnings?.includes("experience") ? (
+          <div className="experience-empty">
+            <p>The story couldn’t be loaded right now.</p>
+            <button type="button" className="retry-button" onClick={retry}><RefreshCw size={14} aria-hidden="true" />Try again</button>
+          </div>
         ) : content?.experience.trim() ? (
           <ExperienceText body={content.experience} format={content.experienceFormat} />
         ) : (
@@ -269,12 +301,41 @@ function DestinationJournal({ destination }: { destination: DestinationOption })
   );
 }
 
-export default function TabibitoApp({ journalData }: { journalData: JournalPageData }) {
+export default function TabibitoApp({ journalData, initialSelection }: { journalData: JournalPageData; initialSelection: JournalSelection }) {
   const { countries, destinationsByCountry, totalCountries, totalDestinations } = journalData;
-  const [countryId, setCountryId] = useState(countries[0]?.id ?? "");
-  const [destinationKey, setDestinationKey] = useState("");
+  const [selection, setSelection] = useState(initialSelection);
+  const { countryId, destinationKey, sort: destinationSort } = selection;
+
+  useEffect(() => {
+    const restoreSelection = () => {
+      const params = new URLSearchParams(window.location.search);
+      setSelection(resolveJournalSelection(journalData, {
+        country: params.get("country") ?? undefined,
+        destination: params.get("destination") ?? undefined,
+        sort: params.get("sort") ?? undefined,
+      }));
+    };
+    window.addEventListener("popstate", restoreSelection);
+    return () => window.removeEventListener("popstate", restoreSelection);
+  }, [journalData]);
+
+  function changeSelection(next: JournalSelection) {
+    const url = new URL(window.location.href);
+    const selected = journalData.destinationsByCountry[next.countryId]?.find((option) => option.key === next.destinationKey);
+    url.searchParams.set("country", next.countryId);
+    if (selected) url.searchParams.set("destination", selected.destination.id);
+    else url.searchParams.delete("destination");
+    url.searchParams.set("sort", next.sort);
+    if (url.href !== window.location.href) window.history.pushState(null, "", url);
+    setSelection(next);
+  }
   const destinations = destinationsByCountry[countryId] ?? [];
   const destination = destinations.find((option) => option.key === destinationKey) ?? destinations[0];
+  const sortedDestinations = destinationSort === "alphabetical"
+    ? [...destinations].sort((left, right) => left.destination.name.localeCompare(
+      right.destination.name, "en", { sensitivity: "base", numeric: true }
+    ))
+    : destinations;
 
   return (
     <div className="journal">
@@ -293,15 +354,25 @@ export default function TabibitoApp({ journalData }: { journalData: JournalPageD
           <div className="route-filters">
             <div className="filter-field">
               <label htmlFor="country-selector">Country</label>
-              <div className="select-wrapper"><select id="country-selector" value={countryId} disabled={!countries.length} onChange={(event) => { setCountryId(event.target.value); setDestinationKey(""); }}>
+              <div className="select-wrapper"><select id="country-selector" value={countryId} disabled={!countries.length} onChange={(event) => changeSelection(resolveJournalSelection(journalData, { country: event.target.value, sort: destinationSort }))}>
                 {countries.map((country) => <option key={country.id} value={country.id}>{country.flag}　{country.name}</option>)}
               </select><ChevronDown size={16} aria-hidden="true" /></div>
             </div>
             <div className="filter-field">
               <label htmlFor="destination-selector">Destination<span>{destinations.length} places</span></label>
-              <div className="select-wrapper"><select id="destination-selector" value={destination?.key ?? ""} disabled={!destinations.length} onChange={(event) => setDestinationKey(event.target.value)}>
-                {destinations.map((option) => <option key={option.key} value={option.key}>{option.destination.name}</option>)}
+              <div className="select-wrapper"><select id="destination-selector" value={destination?.key ?? ""} disabled={!destinations.length} onChange={(event) => changeSelection({ ...selection, destinationKey: event.target.value })}>
+                {sortedDestinations.map((option) => <option key={option.key} value={option.key}>{option.destination.name}</option>)}
               </select><ChevronDown size={16} aria-hidden="true" /></div>
+            </div>
+            <div className="filter-field sort-field">
+              <label htmlFor="destination-sort">Sort by</label>
+              <div className="select-wrapper">
+                <select id="destination-sort" value={destinationSort} onChange={(event) => changeSelection({ ...selection, sort: event.target.value === "alphabetical" ? "alphabetical" : "date" })}>
+                  <option value="date">Date</option>
+                  <option value="alphabetical">Alphabetical</option>
+                </select>
+                <ChevronDown size={16} aria-hidden="true" />
+              </div>
             </div>
           </div>
         </section>

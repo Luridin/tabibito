@@ -20,7 +20,7 @@ type RemotePattern = NonNullable<
 
 function getConfiguredRemotePattern(): RemotePattern | null {
   const configuredBaseUrl =
-    process.env.NEXT_PUBLIC_TRIP_PHOTO_BASE_URL ?? process.env.R2_PUBLIC_BASE_URL;
+    process.env.R2_PUBLIC_BASE_URL ?? process.env.NEXT_PUBLIC_TRIP_PHOTO_BASE_URL;
 
   if (!configuredBaseUrl) {
     return null;

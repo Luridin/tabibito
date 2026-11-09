@@ -31,9 +31,11 @@ function getCountryName(countryId: string) {
 }
 
 function getDestinationRecord(countryId: string, destinationId: string): RouteLookup | null {
+  if (!Object.hasOwn(TRAVEL_DATA, countryId)) return null;
   const country = TRAVEL_DATA[countryId];
   if (!country) return null;
 
+  if (!Object.hasOwn(country.destinations, destinationId)) return null;
   const destination = country.destinations[destinationId];
   if (!destination) return null;
 
@@ -55,9 +57,11 @@ function encodeObjectKey(key: string) {
     .join("/");
 }
 
-function buildPublicUrl(baseUrl: string, objectKey: string) {
+function buildPublicUrl(baseUrl: string, objectKey: string, version?: string) {
   const normalizedBaseUrl = baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`;
-  return new URL(encodeObjectKey(objectKey), normalizedBaseUrl).toString();
+  const url = new URL(encodeObjectKey(objectKey), normalizedBaseUrl);
+  if (version) url.searchParams.set("v", version);
+  return url.toString();
 }
 
 function getPhotoPrefixes(record: RouteLookup) {
@@ -170,13 +174,13 @@ async function getExperienceContent(
   };
 }
 
-function toGalleryImages(keys: string[], lookup: RouteLookup, publicBaseUrl: string, captionManifest: CaptionManifest) {
+function toGalleryImages(keys: string[], lookup: RouteLookup, publicBaseUrl: string, captionManifest: CaptionManifest, versions: Map<string, string>) {
   return keys
     .filter((key) => IMAGE_EXTENSIONS.test(key))
     .sort((left, right) => left.localeCompare(right, undefined, { numeric: true, sensitivity: "base" }))
     .map((key, index) => ({
-      id: `${lookup.destination.id}-${index + 1}`,
-      url: buildPublicUrl(publicBaseUrl, key),
+      id: key,
+      url: buildPublicUrl(publicBaseUrl, key, versions.get(key)),
       caption: captionManifest[key] ?? captionManifest[getObjectName(key)] ?? `${lookup.destination.name} - ${index + 1}`,
     }));
 }
@@ -268,27 +272,51 @@ export async function GET(request: NextRequest) {
 
   try {
     for (const prefix of prefixes) {
-      const response = await client.send(
-        new ListObjectsV2Command({
+      const versions = new Map<string, string>();
+      const objectKeys = new Set<string>();
+      const seenTokens = new Set<string>();
+      let continuationToken: string | undefined;
+
+      do {
+        const response = await client.send(new ListObjectsV2Command({
           Bucket: bucketName,
           Prefix: prefix,
-        })
-      );
+          ContinuationToken: continuationToken,
+        }));
 
-      const keys = (response.Contents ?? [])
-        .map((entry) => entry.Key)
-        .filter((key): key is string => Boolean(key))
-        .filter((key) => key.startsWith(prefix))
-        .filter((key) => !key.endsWith("/"))
-        .filter((key) => !key.slice(prefix.length).includes("/"));
+        for (const entry of response.Contents ?? []) {
+          const key = entry.Key;
+          if (!key || !key.startsWith(prefix) || key.endsWith("/") || key.slice(prefix.length).includes("/")) continue;
+          objectKeys.add(key);
+          const version = entry.ETag?.replace(/^"|"$/g, "") || entry.LastModified?.toISOString();
+          if (version) versions.set(key, version);
+        }
+
+        if (!response.IsTruncated) break;
+        continuationToken = response.NextContinuationToken;
+        if (!continuationToken || seenTokens.has(continuationToken)) {
+          throw new Error("Object listing returned an invalid continuation token.");
+        }
+        seenTokens.add(continuationToken);
+      } while (continuationToken);
+
+      const keys = [...objectKeys];
 
       if (keys.length === 0) {
         continue;
       }
 
-      const captionManifest = await getCaptionManifest(client, bucketName, prefix);
-      const images = toGalleryImages(keys, lookup, publicBaseUrl, captionManifest);
-      const experience = await getExperienceContent(client, bucketName, keys, lookup);
+      const [captionsResult, experienceResult] = await Promise.allSettled([
+        getCaptionManifest(client, bucketName, prefix),
+        getExperienceContent(client, bucketName, keys, lookup),
+      ]);
+      const warnings: ("captions" | "experience")[] = [];
+      if (captionsResult.status === "rejected") warnings.push("captions");
+      if (experienceResult.status === "rejected") warnings.push("experience");
+      const captionManifest = captionsResult.status === "fulfilled" ? captionsResult.value : {};
+      const experience: ExperiencePayload = experienceResult.status === "fulfilled"
+        ? experienceResult.value : { body: "", format: "none" };
+      const images = toGalleryImages(keys, lookup, publicBaseUrl, captionManifest, versions);
 
       return NextResponse.json(
         {
@@ -297,10 +325,11 @@ export async function GET(request: NextRequest) {
           experienceFormat: experience.format,
           configured: true,
           prefix,
+          ...(warnings.length ? { warnings } : {}),
         },
         {
           headers: {
-            "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300",
+            "Cache-Control": warnings.length ? "no-store" : "public, s-maxage=60, must-revalidate",
           },
         }
       );
@@ -316,7 +345,7 @@ export async function GET(request: NextRequest) {
       },
       {
         headers: {
-          "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300",
+          "Cache-Control": "public, s-maxage=60, must-revalidate",
         },
       }
     );

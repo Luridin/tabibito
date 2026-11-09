@@ -18,6 +18,7 @@ export interface DestinationContentResponse {
     configured: boolean;
     prefix: string | null;
     missing?: string[];
+    warnings?: ("captions" | "experience")[];
 }
 
 export interface JournalPageData {
@@ -25,6 +26,12 @@ export interface JournalPageData {
     destinationsByCountry: Record<string, DestinationOption[]>;
     totalDestinations: number;
     totalCountries: number;
+}
+
+export interface JournalSelection {
+    countryId: string;
+    destinationKey: string;
+    sort: "date" | "alphabetical";
 }
 
 export interface DestinationData {

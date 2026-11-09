@@ -1,305 +1,154 @@
 import { execFileSync } from "node:child_process";
-import { writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-const [, , odsPathArg, outputPathArg] = process.argv;
+const defaultCatalogPath = fileURLToPath(new URL("../data/locations.ts", import.meta.url));
+const defaultCountries = [
+  { id: "IN", name: "India", flag: "🇮🇳" },
+  { id: "TH", name: "Thailand", flag: "🇹🇭" },
+  { id: "AE", name: "United Arab Emirates", flag: "🇦🇪" },
+  { id: "JP", name: "Japan", flag: "🇯🇵" },
+];
 
-if (!odsPathArg) {
-  console.error("Usage: node scripts/import-travel-ods.mjs <input.ods> [output.json]");
-  process.exit(1);
+// Python's standard library handles zipped ODS XML, including repeated cells,
+// without relying on regex XML parsing or adding a workbook dependency.
+export function readOdsRows(odsPath) {
+  const reader = `
+import json, sys, zipfile, xml.etree.ElementTree as ET
+ns = {'t': 'urn:oasis:names:tc:opendocument:xmlns:table:1.0', 'x': 'urn:oasis:names:tc:opendocument:xmlns:text:1.0'}
+with zipfile.ZipFile(sys.argv[1]) as archive:
+    root = ET.fromstring(archive.read('content.xml'))
+sheets = root.findall('.//t:table', ns)
+if not sheets:
+    raise ValueError('The spreadsheet has no sheets.')
+sheet = next((s for s in sheets if s.get('{'+ns['t']+'}name') == 'Sheet1'), sheets[0])
+rows = []
+for row in sheet.findall('t:table-row', ns):
+    cells = []
+    for cell in row:
+        if cell.tag not in ('{'+ns['t']+'}table-cell', '{'+ns['t']+'}covered-table-cell'):
+            continue
+        def text(node):
+            result = node.text or ''
+            for child in node:
+                if child.tag == '{'+ns['x']+'}s':
+                    result += ' ' * int(child.get('{'+ns['x']+'}c', '1'))
+                elif child.tag in ('{'+ns['x']+'}tab', '{'+ns['x']+'}line-break'):
+                    result += ' '
+                else:
+                    result += text(child)
+                result += child.tail or ''
+            return result
+        value = ' '.join(text(p) for p in cell.findall('x:p', ns)).strip()
+        repeat = int(cell.get('{'+ns['t']+'}number-columns-repeated', '1'))
+        cells.extend([value] * min(repeat, max(0, 256 - len(cells))))
+    while cells and not cells[-1]:
+        cells.pop()
+    if any(cells):
+        rows.append(cells)
+print(json.dumps(rows, ensure_ascii=False))
+`;
+  return JSON.parse(execFileSync("python3", ["-c", reader, path.resolve(odsPath)], {
+    encoding: "utf8", maxBuffer: 20 * 1024 * 1024,
+  }));
 }
 
-const odsPath = path.resolve(odsPathArg);
-const outputPath = outputPathArg ? path.resolve(outputPathArg) : null;
-
-const countryCodes = {
-  India: "IN",
-  Thailand: "TH",
-  UAE: "AE",
-  "United Arab Emirates": "AE",
-};
-
-const stateFixes = {
-  Pondicherry: "Puducherry",
-  Orissa: "Odisha",
-  Telengana: "Telangana",
-  Harayana: "Haryana",
-  Chattisgarh: "Chhattisgarh",
-  Kashmir: "Jammu & Kashmir",
-  "Andaman and Nicobar": "Andaman & Nicobar Island",
-  "Andaman & Nicobar": "Andaman & Nicobar Island",
-  Delhi: "Delhi",
-  Dubai: "Dubai",
-  "Abu Dhabi": "Abu Dhabi",
-};
-
-const cityFixes = {
-  Mysuru: "Mysore",
-  Madikeri: "Coorg",
-  Chikamagalur: "Chikmagalur",
-  Gokarnma: "Gokarna",
-  Allepey: "Alleppey",
-  Pondicherry: "Puducherry",
-  Udagamandalam: "Ooty",
-  Chikamagalur: "Chikmagalur",
-  Kukke: "Kukke Subramanya",
-  Lehh: "Leh",
-  Benaulim: "Benaulim",
-  Jaiselmer: "Jaisalmer",
-  Cochin: "Kochi",
-  Portblair: "Port Blair",
-  Swarajdeep: "Swaraj Dweep",
-  Shaheedweep: "Shaheed Dweep",
-  Vishakapatnam: "Visakhapatnam",
-  Srinanagar: "Srinagar",
-  Manguluru: "Mangaluru",
-  Conoor: "Coonoor",
-  Thiruvunathapuram: "Thiruvananthapuram",
-  Bhubaneshwar: "Bhubaneswar",
-  "Hemkund sahib": "Hemkund Sahib",
-};
-
-const geoIdFixes = {
-  Delhi: "NCT of Delhi",
-};
-
-const stateIds = {
-  "Andaman & Nicobar Island": "AND",
-  "Andhra Pradesh": "AP",
-  "Arunachal Pradesh": "AR",
-  Assam: "AS",
-  Bihar: "BR",
-  Chhattisgarh: "CG",
-  Delhi: "DL",
-  Goa: "GA",
-  Gujarat: "GJ",
-  Haryana: "HR",
-  "Himachal Pradesh": "HP",
-  Jharkhand: "JH",
-  Karnataka: "KA",
-  Kerala: "KL",
-  "Jammu & Kashmir": "JK",
-  Ladakh: "LA",
-  "Madhya Pradesh": "MP",
-  Maharashtra: "MH",
-  Manipur: "MN",
-  Meghalaya: "ML",
-  Mizoram: "MZ",
-  Nagaland: "NL",
-  Odisha: "OR",
-  Puducherry: "PY",
-  Punjab: "PB",
-  Rajasthan: "RJ",
-  Sikkim: "SK",
-  "Tamil Nadu": "TN",
-  Telangana: "TG",
-  Tripura: "TR",
-  "Uttar Pradesh": "UP",
-  Uttarakhand: "UT",
-  "West Bengal": "WB",
-  Bangkok: "BANGKOK",
-  Pattaya: "PATTAYA",
-  Phuket: "PHUKET",
-  Dubai: "DUBAI",
-  "Abu Dhabi": "ABU_DHABI",
-};
-
-const stateDescriptions = {
-  Karnataka: "The land of sandalwood, coffee hills, coastlines, and layered heritage across the Deccan.",
-  "Tamil Nadu": "A state of temple towns, hill stations, coastal cities, and a deep classical cultural tradition.",
-  Kerala: "Backwaters, hill country, beaches, and lush green landscapes define this southern state.",
-  Puducherry: "A compact coastal union territory shaped by French colonial history and seaside promenades.",
-  Goa: "A small coastal state known for beaches, food, music, and Indo-Portuguese heritage.",
-  Maharashtra: "A vast western state spanning megacities, forts, hills, coastlines, and pilgrimage routes.",
-  Gujarat: "A western state of vibrant cities, sacred sites, white deserts, and long coastlines.",
-  Delhi: "India's capital region, where monuments, dense neighborhoods, and political power meet.",
-  "Himachal Pradesh": "A Himalayan state of mountain towns, valleys, monasteries, and road-trip landscapes.",
-  Uttarakhand: "A northern Himalayan state of pilgrimage routes, forests, lakes, and mountain escapes.",
-  Rajasthan: "A desert state of forts, palaces, old cities, and dramatic landscapes.",
-  Telangana: "A Deccan state anchored by Hyderabad and shaped by forts, cuisine, and dry plateau landscapes.",
-  Punjab: "A northwestern state of agriculture, Sikh heritage, and border history.",
-  "Andhra Pradesh": "A southeastern state of temple towns, long coastlines, and major pilgrimage centers.",
-  Ladakh: "A high-altitude cold desert region known for monasteries, mountain passes, and stark landscapes.",
-  "Jammu & Kashmir": "A Himalayan region of valleys, lakes, mountains, and historic towns.",
-  "Uttar Pradesh": "A populous northern state of historic cities, pilgrimage centers, and Mughal landmarks.",
-  Odisha: "An eastern coastal state known for temples, beaches, tribal culture, and classical art traditions.",
-  Meghalaya: "A northeastern hill state of clouds, waterfalls, caves, and living root bridges.",
-  "Andaman & Nicobar Island": "An island territory in the Bay of Bengal known for beaches, forests, and remote archipelagos.",
-  Sikkim: "A Himalayan state of mountain views, monasteries, and winding hill roads.",
-  "West Bengal": "An eastern state that ranges from Kolkata and river plains to Himalayan foothills.",
-  Assam: "A northeastern state of tea gardens, river islands, wildlife, and cultural festivals.",
-  "Arunachal Pradesh": "India's northeastern frontier of mountains, monasteries, valleys, and remote roads.",
-  Nagaland: "A hill state in northeast India known for tribal cultures, ridges, and village landscapes.",
-  Tripura: "A small northeastern state with royal history, temples, and green landscapes.",
-  Bihar: "A historic Gangetic plain state tied to ancient kingdoms, Buddhism, and river cities.",
-  Jharkhand: "A mineral-rich eastern state of forests, plateaus, waterfalls, and industrial towns.",
-  Manipur: "A northeastern state of valleys, lakes, and layered cultural traditions.",
-  Mizoram: "A mountainous northeastern state of steep ridges, bamboo forests, and quiet towns.",
-  Haryana: "A northern state surrounding Delhi, mixing farmland, highways, and satellite cities.",
-  "Madhya Pradesh": "A central Indian state of heritage cities, forests, temples, and wildlife reserves.",
-  Chhattisgarh: "A central-eastern state of forests, waterfalls, temples, and tribal regions.",
-  Bangkok: "Thailand's capital region of canals, temples, markets, nightlife, and dense urban energy.",
-  Pattaya: "A coastal resort region known for beaches, nightlife, and quick escapes from Bangkok.",
-  Phuket: "Thailand's island province known for beaches, resorts, old town streets, and nearby islands.",
-  Dubai: "An emirate of futuristic skylines, desert highways, luxury retail, and global tourism.",
-  "Abu Dhabi": "The capital emirate of the UAE, combining museums, mosques, coastline, and modern urban planning.",
-};
-
-function decodeText(value = "") {
-  return value
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&apos;/g, "'")
-    .replace(/&quot;/g, '"')
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/\s+/g, " ")
-    .trim();
+export function readCatalog(catalogPath = defaultCatalogPath) {
+  if (!existsSync(catalogPath)) return { countries: defaultCountries, travelData: {} };
+  const source = readFileSync(catalogPath, "utf8");
+  const countryMatch = source.match(/export const COUNTRIES(?:\s*:[^=]+)?\s*=\s*(\[[\s\S]*?\]);/);
+  const dataMatch = source.match(/export const TRAVEL_DATA(?:\s*:[^=]+)?\s*=\s*(\{[\s\S]*\});?\s*$/);
+  if (!countryMatch || !dataMatch) throw new Error("The existing catalog must contain JSON-compatible COUNTRIES and TRAVEL_DATA exports.");
+  return { countries: JSON.parse(countryMatch[1]), travelData: JSON.parse(dataMatch[1]) };
 }
 
-function readRows(sheetXml) {
-  return [...sheetXml.matchAll(/<table:table-row[\s\S]*?<\/table:table-row>/g)].map((match) => match[0]);
+function slug(value) {
+  return value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
 
-function readCells(rowXml) {
-  const cells = [];
-  const matches = rowXml.match(/<table:table-cell(?:\s[^>]*)?[\s\S]*?(?:<\/table:table-cell>|\/>)/g) || [];
+export function importTravelRows(rows, existing = { countries: defaultCountries, travelData: {} }) {
+  if (!rows.length) throw new Error("The spreadsheet is empty.");
+  const headers = rows[0].map((value) => value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim());
+  const column = (aliases) => headers.findIndex((header) => aliases.includes(header));
+  const countryColumn = column(["country"]);
+  const destinationColumn = column(["destination", "city", "place"]);
+  const orderColumn = column(["travel order", "travelorder", "order"]);
+  if (countryColumn < 0 || destinationColumn < 0) throw new Error("Country and Destination columns are required.");
 
-  for (const cell of matches) {
-    const repeat = Number((cell.match(/table:number-columns-repeated="(\d+)"/) || [])[1] || 1);
-    const paragraphs = [...cell.matchAll(/<text:p[^>]*>([\s\S]*?)<\/text:p>/g)].map((match) => decodeText(match[1]));
-    const text = paragraphs.join(" ").trim();
+  const countries = existing.countries;
+  const countryLookup = new Map(countries.flatMap((country) => [
+    [country.id.toLowerCase(), country], [country.name.toLowerCase(), country],
+  ]));
+  const uae = countries.find((country) => country.id === "AE");
+  if (uae) countryLookup.set("uae", uae);
+  const travelData = {};
 
-    for (let index = 0; index < repeat; index += 1) {
-      cells.push(text);
+  for (const [index, cells] of rows.slice(1).entries()) {
+    const countryName = String(cells[countryColumn] ?? "").trim();
+    const name = String(cells[destinationColumn] ?? "").trim();
+    if (!countryName && !name) continue;
+    if (!countryName || !name) throw new Error(`Row ${index + 2}: Country and Destination must both be filled in.`);
+    const country = countryLookup.get(countryName.toLowerCase());
+    if (!country) throw new Error(`Row ${index + 2}: Unknown country "${countryName}". Add its name, ID, and flag to COUNTRIES first.`);
+
+    const rawOrder = orderColumn < 0 ? "" : String(cells[orderColumn] ?? "").trim();
+    const travelOrder = rawOrder ? Number(rawOrder) : index + 1;
+    if (!Number.isSafeInteger(travelOrder) || travelOrder < 1) throw new Error(`Row ${index + 2}: Travel Order must be a positive whole number.`);
+    const previous = Object.values(existing.travelData[country.id]?.destinations ?? {})
+      .find((destination) => destination.name.toLowerCase() === name.toLowerCase());
+    const id = previous?.id ?? slug(name);
+    if (!id) throw new Error(`Row ${index + 2}: Cannot generate an ID for "${name}".`);
+    travelData[country.id] ??= { destinations: Object.create(null) };
+    const destinations = travelData[country.id].destinations;
+    const duplicate = destinations[id];
+    if (duplicate) {
+      if (duplicate.name.toLowerCase() !== name.toLowerCase()) throw new Error(`Row ${index + 2}: Destination ID collision for "${name}".`);
+      duplicate.travelOrder = Math.min(duplicate.travelOrder, travelOrder);
+      continue;
     }
-  }
-
-  return cells;
-}
-
-function toCityId(value) {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-}
-
-function cityDescription(city, state, country) {
-  return `Visited ${city} in ${state}, ${country}.`;
-}
-
-function normalizeHeader(value = "") {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-}
-
-function findColumnIndex(headers, aliases, fallbackIndex) {
-  const normalizedHeaders = headers.map((header) => normalizeHeader(header));
-  const aliasSet = new Set(aliases.map((alias) => normalizeHeader(alias)));
-  const index = normalizedHeaders.findIndex((header) => aliasSet.has(header));
-  return index >= 0 ? index : fallbackIndex;
-}
-
-const xml = execFileSync("unzip", ["-p", odsPath, "content.xml"], {
-  encoding: "utf8",
-  maxBuffer: 20 * 1024 * 1024,
-});
-
-const sheetMatch = xml.match(/<table:table[^>]*table:name="Sheet1"[\s\S]*?<\/table:table>/);
-if (!sheetMatch) {
-  console.error("Could not find Sheet1 in ODS file.");
-  process.exit(1);
-}
-
-const rows = readRows(sheetMatch[0]);
-const headerCells = readCells(rows[0]);
-const countryColumn = findColumnIndex(headerCells, ["Country"], 1);
-const stateColumn = findColumnIndex(headerCells, ["State", "Region", "Province"], 2);
-const cityColumn = findColumnIndex(headerCells, ["City", "Destination", "Place"], 3);
-const travelOrderColumn = findColumnIndex(headerCells, ["Travel Order", "TravelOrder", "Order"], 0);
-const travelData = {};
-let fallbackTravelOrder = 1;
-
-for (const row of rows.slice(1)) {
-  const cells = readCells(row);
-
-  const countryRaw = cells[countryColumn];
-  const stateRaw = cells[stateColumn];
-  const cityRaw = cells[cityColumn];
-  const travelOrderRaw = cells[travelOrderColumn];
-  if (!countryRaw || !stateRaw || !cityRaw) continue;
-
-  const parsedTravelOrder = Number.parseInt(String(travelOrderRaw ?? "").trim(), 10);
-  const travelOrder = Number.isFinite(parsedTravelOrder) ? parsedTravelOrder : fallbackTravelOrder;
-  fallbackTravelOrder += 1;
-
-  const country = countryRaw.trim();
-  const state = stateFixes[stateRaw.trim()] || stateRaw.trim();
-  const city = cityFixes[cityRaw.trim()] || cityRaw.trim();
-  const countryId = countryCodes[country];
-
-  if (!countryId) continue;
-
-  if (!travelData[countryId]) {
-    travelData[countryId] = { states: {} };
-  }
-
-  const stateId = stateIds[state] || state.toUpperCase().replace(/[^A-Z0-9]+/g, "_");
-  if (!travelData[countryId].states[stateId]) {
-    travelData[countryId].states[stateId] = {
-      id: stateId,
-      geoId: geoIdFixes[state] || state,
-      name: state,
-      description: stateDescriptions[state] || `Visited places in ${state}, ${country}.`,
+    destinations[id] = {
+      ...previous,
+      id, name,
+      description: previous?.description ?? `Visited ${name} in ${country.name}.`,
       visited: true,
-      cities: [],
+      travelOrder,
+      photoFolder: previous?.photoFolder ?? `${country.name}/${name}`,
     };
   }
 
-  const existingCity = travelData[countryId].states[stateId].cities.find((entry) => entry.name === city);
-
-  if (!existingCity) {
-    travelData[countryId].states[stateId].cities.push({
-      id: toCityId(city),
-      name: city,
-      description: cityDescription(city, state, country),
-      visited: true,
-      travelOrder,
-    });
-  } else if (existingCity.travelOrder === undefined || travelOrder < existingCity.travelOrder) {
-    existingCity.travelOrder = travelOrder;
+  if (!Object.keys(travelData).length) throw new Error("No destinations were found; refusing to generate an empty catalog.");
+  for (const country of Object.values(travelData)) {
+    country.destinations = Object.fromEntries(Object.values(country.destinations)
+      .sort((left, right) => left.travelOrder - right.travelOrder || left.name.localeCompare(right.name))
+      .map((destination) => [destination.id, destination]));
   }
+  return { countries, travelData };
 }
 
-for (const country of Object.values(travelData)) {
-  for (const state of Object.values(country.states)) {
-    state.cities.sort((left, right) => {
-      const leftOrder = left.travelOrder ?? Number.MAX_SAFE_INTEGER;
-      const rightOrder = right.travelOrder ?? Number.MAX_SAFE_INTEGER;
-
-      if (leftOrder !== rightOrder) {
-        return leftOrder - rightOrder;
-      }
-
-      return left.name.localeCompare(right.name);
-    });
-  }
+export function serializeCatalog(catalog, typescript = false) {
+  const data = JSON.stringify(catalog.travelData, null, 4);
+  if (!typescript) return `${data}\n`;
+  return `import type { Country, TravelData } from "@/types";\n\nexport const COUNTRIES: Country[] = ${JSON.stringify(catalog.countries, null, 4)};\n\nexport const TRAVEL_DATA: TravelData = ${data};\n`;
 }
 
-for (const countryId of Object.keys(travelData).sort()) {
-  const sortedStates = Object.values(travelData[countryId].states).sort((left, right) => {
-    const leftOrder = Math.min(...left.cities.map((city) => city.travelOrder ?? Number.MAX_SAFE_INTEGER));
-    const rightOrder = Math.min(...right.cities.map((city) => city.travelOrder ?? Number.MAX_SAFE_INTEGER));
-
-    if (leftOrder !== rightOrder) {
-      return leftOrder - rightOrder;
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  try {
+    const [, , inputPath, outputPath] = process.argv;
+    if (!inputPath) throw new Error("Usage: node scripts/import-travel-ods.mjs <input.ods> [output.json|output.ts]");
+    const catalog = importTravelRows(readOdsRows(inputPath), readCatalog());
+    const serialized = serializeCatalog(catalog, outputPath?.endsWith(".ts"));
+    if (outputPath) {
+      const target = path.resolve(outputPath);
+      mkdirSync(path.dirname(target), { recursive: true });
+      const temporary = `${target}.tmp-${process.pid}`;
+      try { writeFileSync(temporary, serialized); renameSync(temporary, target); }
+      finally { rmSync(temporary, { force: true }); }
+    } else {
+      process.stdout.write(serialized);
     }
-
-    return left.name.localeCompare(right.name);
-  });
-  travelData[countryId].states = Object.fromEntries(sortedStates.map((state) => [state.id, state]));
-}
-
-const serialized = JSON.stringify(travelData, null, 2);
-if (outputPath) {
-  writeFileSync(outputPath, serialized + "\n");
-} else {
-  process.stdout.write(serialized + "\n");
+  } catch (error) {
+    console.error(error.message);
+    process.exitCode = 1;
+  }
 }
